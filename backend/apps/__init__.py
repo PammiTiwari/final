@@ -1,0 +1,449 @@
+import os
+from dotenv import load_dotenv
+from flask import Flask
+from flask_sqlalchemy import SQLAlchemy
+from flask_jwt_extended import JWTManager
+from flask_cors import CORS
+from flask_restful import Api
+
+load_dotenv(os.path.join(os.path.dirname(__file__), "..", ".env"))
+
+db = SQLAlchemy()
+jwt = JWTManager()
+
+
+def create_app(env="development"):
+    from .config import config_map
+    app = Flask(__name__)
+    app.config.from_object(config_map[env])
+
+    db.init_app(app)
+    jwt.init_app(app)
+    CORS(app, resources={r"/api/*": {"origins": "*"}})
+
+    @jwt.token_in_blocklist_loader
+    def _reject_deactivated_user(jwt_header, jwt_payload):
+        from .models import User
+        user = db.session.get(User, int(jwt_payload["sub"]))
+        return user is None or not user.is_active
+
+    api = Api(app, prefix="/api", errors={
+        "RequestEntityTooLarge": {
+            "message": "That file is over 5MB — please choose a smaller photo.",
+            "status": 413,
+        },
+    })
+
+    from .api import register_resources
+    register_resources(api)
+
+    with app.app_context():
+        db.create_all()
+        _seed_data()
+
+    return app
+
+
+def _seed_data():
+    from datetime import datetime, timedelta, timezone
+    from .models import (User, Department, ServiceRequest, Assignment,
+                         Facility, Post, PostComment, PostLike, Notification,
+                         Role, Priority, RequestStatus)
+
+    if User.query.count() > 0:
+        return
+
+    def dt(days_ago, hour=10, minute=0):
+        return datetime.now(timezone.utc).replace(tzinfo=None) - timedelta(days=days_ago) + timedelta(hours=hour-10, minutes=minute)
+
+    # ── Users ─────────────────────────────────────────────────────────────────
+    admin = User(name="Preetam Nagar Admin", email="admin@civic.gov", role=Role.ADMIN,
+                 phone="9000000001", ward="Central", department="Administration")
+    admin.set_password("Admin@123")
+
+    # Officers (staff) — one per department
+    o1 = User(name="Rajesh Kumar", email="rajesh@civic.gov", role=Role.STAFF,
+              phone="9876543210", ward="Ward-1", department="Road Maintenance")
+    o1.set_password("Staff@123")
+
+    o2 = User(name="Priya Singh", email="priya@civic.gov", role=Role.STAFF,
+              phone="9876543212", ward="Ward-2", department="Electricity Department")
+    o2.set_password("Staff@123")
+
+    o3 = User(name="Imran Khan", email="imran@civic.gov", role=Role.STAFF,
+              phone="9876543213", ward="Ward-3", department="Water Supply Department")
+    o3.set_password("Staff@123")
+
+    o4 = User(name="Sandeep Yadav", email="sandeep@civic.gov", role=Role.STAFF,
+              phone="9876543214", ward="Ward-4", department="Sanitation Department")
+    o4.set_password("Staff@123")
+
+    o5 = User(name="Kavita Sharma", email="kavita@civic.gov", role=Role.STAFF,
+              phone="9876543215", ward="Ward-5", department="Parks & Public Spaces")
+    o5.set_password("Staff@123")
+
+    # Citizens — all residents of Preetam Nagar; street names below are
+    # internal to this one colony and consistently mapped to its wards:
+    #   Ward-1: MG Road, Block A, School Road, Stadium Road
+    #   Ward-2: Park Street, Colony Gate, Main Boulevard
+    #   Ward-3: Civil Lines Road, Nehru Chowk, Library Road
+    #   Ward-4: Green Avenue, Temple Road, Main Market, Community Park Road
+    #   Ward-5: Nehru Colony, Railway Road, Main Road
+    #   Central: Civic Center, Central Park
+    c1 = User(name="Amit Sharma", email="amit@gmail.com", role=Role.CITIZEN,
+              phone="9111111101", address="12, MG Road, Preetam Nagar (Ward-1)", ward="Ward-1")
+    c1.set_password("Citizen@123")
+
+    c2 = User(name="Neha Verma", email="neha@gmail.com", role=Role.CITIZEN,
+              phone="9111111102", address="45, Park Street, Preetam Nagar (Ward-2)", ward="Ward-2")
+    c2.set_password("Citizen@123")
+
+    c3 = User(name="Ravi Gupta", email="ravi.g@gmail.com", role=Role.CITIZEN,
+              phone="9111111103", address="78, Civil Lines Road, Preetam Nagar (Ward-3)", ward="Ward-3")
+    c3.set_password("Citizen@123")
+
+    c4 = User(name="Sunita Mehta", email="sunita@gmail.com", role=Role.CITIZEN,
+              phone="9111111104", address="23, Green Avenue, Preetam Nagar (Ward-4)", ward="Ward-4")
+    c4.set_password("Citizen@123")
+
+    c5 = User(name="Arjun Singh", email="arjun@gmail.com", role=Role.CITIZEN,
+              phone="9111111105", address="56, Nehru Colony, Preetam Nagar (Ward-5)", ward="Ward-5")
+    c5.set_password("Citizen@123")
+
+    db.session.add_all([admin, o1, o2, o3, o4, o5, c1, c2, c3, c4, c5])
+    db.session.flush()
+
+    # ── Departments ───────────────────────────────────────────────────────────
+    depts = [
+        Department(name="Road Maintenance", description="Handles road repairs, potholes, and street maintenance", officer_incharge_id=o1.id),
+        Department(name="Electricity Department", description="Manages streetlights, electrical poles, and power supply issues", officer_incharge_id=o2.id),
+        Department(name="Water Supply Department", description="Handles water supply, pipeline leakage, and drainage issues", officer_incharge_id=o3.id),
+        Department(name="Sanitation Department", description="Manages garbage collection, sewage, and cleanliness", officer_incharge_id=o4.id),
+        Department(name="Parks & Public Spaces", description="Maintains parks, public gardens, and recreational areas", officer_incharge_id=o5.id),
+    ]
+    db.session.add_all(depts)
+
+    # ── Facilities ────────────────────────────────────────────────────────────
+    facilities = [
+        Facility(name="City Community Hall", facility_type="Community Hall",
+                 address="1, Civic Center, Preetam Nagar (Central)", ward="Central",
+                 capacity=200, fee_per_hour=500, description="Large community hall for events",
+                 amenities="AC, Projector, Stage, Parking, Restrooms",
+                 image_urls=["/api/uploads/community-hall.jpg"]),
+        Facility(name="Ward-1 Sports Ground", facility_type="Sports Ground",
+                 address="Stadium Road, Preetam Nagar (Ward-1)", ward="Ward-1",
+                 capacity=100, fee_per_hour=100, description="Open ground for sports",
+                 amenities="Changing Rooms, Floodlights, Drinking Water",
+                 image_urls=["/api/uploads/sports-ground.jpg"]),
+        Facility(name="Public Library Conference Room", facility_type="Conference Room",
+                 address="Library Building, Civil Lines Road, Preetam Nagar (Ward-3)", ward="Ward-3",
+                 capacity=50, fee_per_hour=200, description="Quiet conference room",
+                 amenities="AC, WiFi, Whiteboard, Projector",
+                 image_urls=["/api/uploads/library-room.jpg"]),
+        Facility(name="Ward-2 Recreation Park", facility_type="Park",
+                 address="Colony Gate, Preetam Nagar (Ward-2)", ward="Ward-2",
+                 capacity=300, fee_per_hour=0, description="Open park for community events",
+                 amenities="Open Space, Seating, Parking",
+                 image_urls=["/api/uploads/recreation-park.jpg"]),
+    ]
+    db.session.add_all(facilities)
+
+    # ── Service Requests (20 complaints) ──────────────────────────────────────
+    # Every photo below was manually opened and checked — several stock files are
+    # mislabeled (e.g. "manhole.jpg" is actually an open street drain, "water-pipe.jpg"
+    # is an intact water tower, "dirty-water.jpg" is a water-relief tanker truck,
+    # "park-bench.jpg" is a well-kept playground). Assignments here match what the
+    # photo actually shows, not the filename. Where no photo genuinely fits, the
+    # complaint is left with 0 images rather than forcing a mismatch.
+    requests_data = [
+        # Road issues (assigned to Rajesh)
+        # Road issues
+        dict(citizen_id=c1.id, category="road", title="Large potholes on MG Road causing accidents",
+             description="There are multiple large potholes near the main junction on MG Road. Three vehicles have been damaged this week. Requires urgent repair.",
+             address="MG Road Junction, Preetam Nagar (Ward-1)", ward="Ward-1", priority=Priority.URGENT,
+             status=RequestStatus.IN_PROGRESS, created_at=dt(12), staff=o1, notes="Assigned to road repair team. Work started.",
+             image_urls=["/api/uploads/pothole.jpg", "/api/uploads/footpath.jpg", "/api/uploads/road-damage.jpg"]),
+        dict(citizen_id=c2.id, category="road", title="Damaged footpath near school",
+             description="The footpath outside the school on Park Street is completely broken. Students are forced to walk on the road. Very dangerous situation.",
+             address="Park Street, near School, Preetam Nagar (Ward-2)", ward="Ward-2", priority=Priority.HIGH,
+             status=RequestStatus.PENDING, created_at=dt(8)),
+        dict(citizen_id=c3.id, category="road", title="Road cave-in at Nehru Chowk",
+             description="A section of road near Nehru Chowk has caved in after recent rains. The hole is about 3 feet deep and very dangerous for traffic.",
+             address="Nehru Chowk, Preetam Nagar (Ward-3)", ward="Ward-3", priority=Priority.URGENT,
+             status=RequestStatus.RESOLVED, created_at=dt(20), resolved_at=dt(15), staff=o1, notes="Road fully repaired and patched.",
+             image_urls=["/api/uploads/road-damage.jpg"]),
+        dict(citizen_id=c4.id, category="road", title="Speed breaker needed near temple",
+             description="Vehicles overspeed near the temple on Temple Road. Many accidents have happened. Please install a speed breaker.",
+             address="Temple Road, Preetam Nagar (Ward-4)", ward="Ward-4", priority=Priority.MEDIUM,
+             status=RequestStatus.PENDING, created_at=dt(5)),
+
+        # Electricity issues
+        dict(citizen_id=c1.id, category="electricity", title="Street light not working near Block A park",
+             description="The street light near the Block A park has not been working for 3 days. It is very unsafe to walk at night. Children play in this area.",
+             address="Block A Park Gate, Preetam Nagar (Ward-1)", ward="Ward-1", priority=Priority.HIGH,
+             status=RequestStatus.IN_PROGRESS, created_at=dt(3), staff=o2, notes="Maintenance team assigned. Bulb replacement in progress.",
+             image_urls=["/api/uploads/streetlight.jpg", "/api/uploads/dark-street.jpg"]),
+        dict(citizen_id=c2.id, category="electricity", title="Multiple streetlights down on Park Street",
+             description="At least 5 streetlights on Park Street have been non-functional for a week. The entire street is dark at night which is dangerous.",
+             address="Park Street, Preetam Nagar (Ward-2)", ward="Ward-2", priority=Priority.HIGH,
+             status=RequestStatus.ASSIGNED, created_at=dt(6), staff=o2, notes="Inspected. Parts ordered.",
+             image_urls=["/api/uploads/dark-street.jpg"]),
+        dict(citizen_id=c5.id, category="electricity", title="Electrical pole leaning dangerously",
+             description="An electrical pole on Main Road is leaning at a dangerous angle. It might fall any time. Please fix immediately.",
+             address="Main Road, Preetam Nagar (Ward-5)", ward="Ward-5", priority=Priority.URGENT,
+             status=RequestStatus.PENDING, created_at=dt(1),
+             image_urls=["/api/uploads/electric-pole.jpg"]),
+        dict(citizen_id=c3.id, category="electricity", title="Power outage affecting entire block",
+             description="Our entire residential block has had no electricity for 2 days. The transformer may have blown. Please send a technician.",
+             address="Civil Lines Road, Preetam Nagar (Ward-3)", ward="Ward-3", priority=Priority.URGENT,
+             status=RequestStatus.RESOLVED, created_at=dt(15), resolved_at=dt(13), staff=o2, notes="Transformer replaced. Power restored.",
+             evidence_urls=["/api/uploads/streetlight.jpg"]),
+
+        # Water issues
+        dict(citizen_id=c4.id, category="water", title="Water pipeline leakage on Green Avenue",
+             description="There is a major water pipeline leakage on Green Avenue. Water has been flooding the road for 2 days. Huge wastage of water.",
+             address="Green Avenue, Preetam Nagar (Ward-4)", ward="Ward-4", priority=Priority.HIGH,
+             status=RequestStatus.IN_PROGRESS, created_at=dt(4), staff=o3, notes="Crew deployed. Pipe repair underway.",
+             image_urls=["/api/uploads/flooding.jpg"]),
+        dict(citizen_id=c1.id, category="water", title="No water supply for 3 days",
+             description="Our area has not received any water supply for 3 consecutive days. We are facing severe hardship. Please restore supply immediately.",
+             address="Block A, MG Road, Preetam Nagar (Ward-1)", ward="Ward-1", priority=Priority.URGENT,
+             status=RequestStatus.PENDING, created_at=dt(3),
+             image_urls=["/api/uploads/dirty-water.jpg", "/api/uploads/water-pipe.jpg"]),
+        dict(citizen_id=c5.id, category="water", title="Contaminated drinking water complaints",
+             description="The water coming from our taps has an unusual smell and yellowish colour. Residents fear it may be contaminated. Please check urgently.",
+             address="Nehru Colony, Preetam Nagar (Ward-5)", ward="Ward-5", priority=Priority.URGENT,
+             status=RequestStatus.ASSIGNED, created_at=dt(7), staff=o3, notes="Water sample taken for testing."),
+        dict(citizen_id=c2.id, category="water", title="Clogged drainage causing flooding",
+             description="The main drainage channel near our colony is completely blocked. Rainwater is flooding homes. Please clear immediately.",
+             address="Colony Gate, Preetam Nagar (Ward-2)", ward="Ward-2", priority=Priority.HIGH,
+             status=RequestStatus.RESOLVED, created_at=dt(18), resolved_at=dt(16), staff=o3, notes="Drainage cleared. Good for monsoon season.",
+             image_urls=["/api/uploads/manhole.jpg", "/api/uploads/flooding.jpg"],
+             evidence_urls=["/api/uploads/recreation-park.jpg"]),
+
+        # Sanitation/Waste issues
+        dict(citizen_id=c3.id, category="waste", title="Garbage not collected for a week",
+             description="Garbage has not been collected from our area for over a week. The garbage is piling up and causing health hazards. Rats and flies are increasing.",
+             address="Civil Lines Road, Preetam Nagar (Ward-3)", ward="Ward-3", priority=Priority.HIGH,
+             status=RequestStatus.PENDING, created_at=dt(7),
+             image_urls=["/api/uploads/garbage.jpg", "/api/uploads/garbage-bins.jpg"]),
+        dict(citizen_id=c4.id, category="sanitation", title="Overflowing garbage bins at market",
+             description="The garbage bins at the local market are overflowing. The stench is unbearable and it's a major health concern for shopkeepers and buyers.",
+             address="Main Market, Preetam Nagar (Ward-4)", ward="Ward-4", priority=Priority.HIGH,
+             status=RequestStatus.IN_PROGRESS, created_at=dt(5), staff=o4, notes="Extra garbage truck deployed.",
+             image_urls=["/api/uploads/garbage-bins.jpg", "/api/uploads/garbage.jpg"]),
+        dict(citizen_id=c5.id, category="sanitation", title="Open defecation in public area",
+             description="People are defecating in the open near the Railway Road crossing. No public toilets are available. This is a serious health and hygiene issue.",
+             address="Railway Road, Preetam Nagar (Ward-5)", ward="Ward-5", priority=Priority.URGENT,
+             status=RequestStatus.RESOLVED, created_at=dt(25), resolved_at=dt(20), staff=o4, notes="Mobile toilet installed. Area cleaned."),
+
+        # Parks & Public Spaces
+        dict(citizen_id=c1.id, category="parks", title="Broken playground equipment in Block A park",
+             description="The slides and swings in the Block A park are broken and rusted. Children have been injured. Please repair or replace the equipment.",
+             address="Block A Park, Preetam Nagar (Ward-1)", ward="Ward-1", priority=Priority.MEDIUM,
+             status=RequestStatus.PENDING, created_at=dt(10),
+             image_urls=["/api/uploads/playground.jpg"]),
+        dict(citizen_id=c2.id, category="parks", title="Trees blocking CCTV cameras",
+             description="Overgrown trees on Main Boulevard are completely blocking the CCTV cameras installed for security. Crime has increased in the area.",
+             address="Main Boulevard, Preetam Nagar (Ward-2)", ward="Ward-2", priority=Priority.MEDIUM,
+             status=RequestStatus.ASSIGNED, created_at=dt(9), staff=o5, notes="Tree trimming crew scheduled for next week.",
+             image_urls=["/api/uploads/trees.jpg"]),
+        dict(citizen_id=c3.id, category="parks", title="Public toilet in bad condition",
+             description="The public toilet near the Civil Lines Road bus stop is in a terrible condition. No water, broken doors, and very unhygienic. Please renovate.",
+             address="Civil Lines Road Bus Stop, Preetam Nagar (Ward-3)", ward="Ward-3", priority=Priority.HIGH,
+             status=RequestStatus.RESOLVED, created_at=dt(30), resolved_at=dt(25), staff=o5, notes="Toilet renovated and cleaned. New doors installed."),
+        dict(citizen_id=c4.id, category="parks", title="Damaged benches in community park",
+             description="Most park benches in the community park are broken and rusted. Elderly citizens have no place to sit. Request immediate repair.",
+             address="Community Park Road, Preetam Nagar (Ward-4)", ward="Ward-4", priority=Priority.LOW,
+             status=RequestStatus.PENDING, created_at=dt(14)),
+        dict(citizen_id=c5.id, category="other", title="Stray dogs menace in residential area",
+             description="A large group of stray dogs in Nehru Colony is threatening residents, especially children and elderly. Two people bitten last week.",
+             address="Nehru Colony, Preetam Nagar (Ward-5)", ward="Ward-5", priority=Priority.HIGH,
+             status=RequestStatus.CLOSED, created_at=dt(35), resolved_at=dt(30), staff=o4, notes="Animal control team visited. Dogs vaccinated and relocated.",
+             image_urls=["/api/uploads/stray-dog.jpg"],
+             evidence_urls=["/api/uploads/recreation-park.jpg"]),
+        dict(citizen_id=c1.id, category="road", title="Missing manhole cover on MG Road",
+             description="A manhole cover is missing on MG Road near the school. This is extremely dangerous especially for two-wheelers. Could cause fatal accidents.",
+             address="MG Road, School Junction, Preetam Nagar (Ward-1)", ward="Ward-1", priority=Priority.URGENT,
+             status=RequestStatus.IN_PROGRESS, created_at=dt(2), staff=o1, notes="Cover ordered. Temporary barricade placed.",
+             image_urls=["/api/uploads/road-damage.jpg"]),
+    ]
+
+    created_requests = []
+    for rd in requests_data:
+        staff = rd.pop("staff", None)
+        notes = rd.pop("notes", None)
+        r = ServiceRequest(**rd)
+        db.session.add(r)
+        created_requests.append((r, staff, notes))
+
+    db.session.flush()
+
+    # Create assignments for those with staff
+    from datetime import timedelta
+    for r, staff, notes in created_requests:
+        if staff:
+            a = Assignment(request_id=r.id, staff_id=staff.id, assigned_by=admin.id,
+                          notes=notes, assigned_at=r.created_at + timedelta(hours=2))
+            if r.status in [RequestStatus.RESOLVED, RequestStatus.CLOSED]:
+                a.completed_at = r.resolved_at
+            db.session.add(a)
+
+    # ── Community Posts ───────────────────────────────────────────────────────
+    posts = [
+        Post(citizen_id=c1.id,
+             content="Street light not working near Block A park since 3 days. Very unsafe for evening walkers. Please fix it urgently! @ElectricityDept",
+             category="general", location="Block A Park, Preetam Nagar (Ward-1)", ward="Ward-1",
+             image_urls=["/api/uploads/dark-street.jpg", "/api/uploads/streetlight.jpg"],
+             created_at=dt(0, hour=8)),
+        Post(citizen_id=c2.id,
+             content="Garbage not collected from our area last 2 days. The smell is unbearable and we can see rats near the garbage dump. Please take action!",
+             category="general", location="Park Street, Preetam Nagar (Ward-2)", ward="Ward-2",
+             image_urls=["/api/uploads/garbage.jpg", "/api/uploads/garbage-bins.jpg"],
+             created_at=dt(0, hour=11)),
+        Post(citizen_id=c3.id,
+             content="The pothole on MG Road near the main junction is getting bigger every day. A motorcycle rider fell down yesterday. Authorities please act fast!",
+             category="general", location="MG Road Junction, Preetam Nagar (Ward-1)", ward="Ward-1",
+             image_urls=["/api/uploads/pothole.jpg"],
+             created_at=dt(1, hour=9)),
+        Post(citizen_id=c4.id,
+             content="Water supply has been irregular for the past week in our part of Preetam Nagar. We receive water only for 30 minutes daily which is not enough. Request attention.",
+             category="general", location="Green Avenue, Preetam Nagar (Ward-4)", ward="Ward-4",
+             image_urls=["/api/uploads/dirty-water.jpg"],
+             created_at=dt(1, hour=14)),
+        Post(citizen_id=c5.id,
+             content="The children's park near Nehru Colony is in terrible condition. Broken swings, no lights, and garbage everywhere. Can the parks dept please help?",
+             category="general", location="Nehru Colony Park, Preetam Nagar (Ward-5)", ward="Ward-5",
+             image_urls=["/api/uploads/playground.jpg"],
+             created_at=dt(2, hour=10)),
+        Post(citizen_id=c1.id,
+             content="Successfully got the pothole repaired near my house in just 5 days after submitting the complaint. Thank you Road Maintenance team! Great initiative by the colony administration.",
+             category="general", location="Block A, Preetam Nagar (Ward-1)", ward="Ward-1",
+             created_at=dt(3, hour=16)),
+        Post(citizen_id=admin.id,
+             title="Water Supply Maintenance Notice",
+             content="Dear Residents, water supply will be interrupted across Preetam Nagar on 18 May 2024 from 9 AM to 5 PM due to pipeline maintenance work. We apologize for the inconvenience. Emergency water tankers will be available.",
+             category="announcement", location="All of Preetam Nagar", ward="Central",
+             is_official=True, created_at=dt(5, hour=9)),
+        Post(citizen_id=admin.id,
+             title="Clean Colony Drive - Join Us!",
+             content="Join us for a Clean Colony Drive on 25 May 2024 at Central Park, Preetam Nagar. Bring gloves and bags. Free refreshments for all participants. Let's make our colony cleaner together! Register at the civic center.",
+             category="announcement", location="Central Park, Preetam Nagar (Central)", ward="Central",
+             is_official=True, created_at=dt(6, hour=10)),
+        Post(citizen_id=admin.id,
+             title="Monsoon Preparedness Advisory",
+             content="With monsoon season approaching, we urge residents to report drainage blockages immediately. Our teams are on standby. Please avoid waterlogged roads and report any flooding to our helpline: 1800-CIVIC-00. Stay safe!",
+             category="announcement", location="All of Preetam Nagar", ward="Central",
+             is_official=True, created_at=dt(7, hour=11)),
+        Post(citizen_id=c2.id,
+             content="Amazing to see the colony administration taking quick action on complaints. My water leakage complaint was resolved in just 3 days! The system is working. Keep it up!",
+             category="general", location="Park Street, Preetam Nagar (Ward-2)", ward="Ward-2",
+             created_at=dt(4, hour=15)),
+    ]
+    db.session.add_all(posts)
+    db.session.flush()
+
+    # Add comments to posts
+    comments = [
+        PostComment(post_id=posts[0].id, user_id=c2.id,
+                    content="Same problem in our area too! Three lights not working near the bus stop.", created_at=dt(0, hour=8, minute=30)),
+        PostComment(post_id=posts[0].id, user_id=o2.id,
+                    content="We have received your complaint. Maintenance team has been assigned. Expected resolution within 48 hours.",
+                    is_official=True, created_at=dt(0, hour=9)),
+        PostComment(post_id=posts[1].id, user_id=c3.id,
+                    content="Same issue in Ward-3! The garbage truck hasn't come for 5 days now.", created_at=dt(0, hour=11, minute=30)),
+        PostComment(post_id=posts[1].id, user_id=o4.id,
+                    content="Our team has been informed. Collection vehicle will reach your area today by 4 PM.",
+                    is_official=True, created_at=dt(0, hour=12)),
+        PostComment(post_id=posts[2].id, user_id=c4.id,
+                    content="I've been reporting this pothole for 2 months! Still not fixed.", created_at=dt(1, hour=9, minute=30)),
+        PostComment(post_id=posts[2].id, user_id=o1.id,
+                    content="Work order has been issued. Our crew will be at the site tomorrow morning.",
+                    is_official=True, created_at=dt(1, hour=10)),
+        PostComment(post_id=posts[3].id, user_id=c5.id,
+                    content="We face the same in Ward-5. Only 20 minutes of water daily!", created_at=dt(1, hour=14, minute=30)),
+        PostComment(post_id=posts[4].id, user_id=c1.id,
+                    content="Please repair the park near our area too! Kids have no safe place to play.", created_at=dt(2, hour=10, minute=30)),
+    ]
+    db.session.add_all(comments)
+
+    # Add likes
+    likes_data = [
+        (posts[0].id, c2.id), (posts[0].id, c3.id), (posts[0].id, c4.id),
+        (posts[1].id, c1.id), (posts[1].id, c3.id), (posts[1].id, c5.id),
+        (posts[2].id, c1.id), (posts[2].id, c4.id), (posts[2].id, c5.id),
+        (posts[5].id, c2.id), (posts[5].id, c3.id),
+        (posts[9].id, c1.id), (posts[9].id, c3.id), (posts[9].id, c5.id),
+    ]
+    for post_id, user_id in likes_data:
+        db.session.add(PostLike(post_id=post_id, user_id=user_id))
+
+    # ── Notifications ─────────────────────────────────────────────────────────
+    notifs = [
+        Notification(user_id=c1.id, title="Complaint Assigned", message="Your complaint CMP0001 (Large potholes on MG Road) has been assigned to Road Maintenance Department.", notif_type="info"),
+        Notification(user_id=c1.id, title="Complaint In Progress", message="Work has started on your complaint CMP0001. Expected completion in 3-5 days.", notif_type="info"),
+        Notification(user_id=c2.id, title="Complaint Assigned", message="Your complaint CMP0006 (Multiple streetlights down on Park Street) has been assigned to Electricity Department.", notif_type="info"),
+        Notification(user_id=c3.id, title="Complaint Resolved", message="Your complaint CMP0003 (Road cave-in at Nehru Chowk) has been resolved. Please verify and close.", notif_type="success"),
+        Notification(user_id=c4.id, title="Complaint In Progress", message="Work has started on your complaint CMP0009 (Water pipeline leakage). Our crew is on site.", notif_type="info"),
+        Notification(user_id=o1.id, title="New Assignment", message="You have been assigned complaint CMP0001 - Large potholes on MG Road. Please take action.", notif_type="warning"),
+        Notification(user_id=o2.id, title="New Assignment", message="You have been assigned complaint CMP0005 - Street light not working near Sector 5 park.", notif_type="warning"),
+        Notification(user_id=admin.id, title="New Complaints", message="5 new complaints have been submitted in the last 24 hours. Please review and assign.", notif_type="info"),
+    ]
+    db.session.add_all(notifs)
+
+    # ── Bookings & Payments ───────────────────────────────────────────────────
+    from datetime import date, time as dtime
+    from .models import Booking, Payment, BookingStatus, PaymentStatus
+    import uuid
+
+    f1 = facilities[0]  # Community Hall (₹500/hr)
+    f2 = facilities[1]  # Sports Ground (₹100/hr)
+    f3 = facilities[2]  # Conference Room (₹200/hr)
+    f4 = facilities[3]  # Recreation Park (free)
+
+    bookings = [
+        Booking(facility_id=f1.id, citizen_id=c1.id,
+                booking_date=date(2026, 7, 10), start_time=dtime(10, 0), end_time=dtime(13, 0),
+                purpose="Ward-1 Community Meeting", attendees=80, status=BookingStatus.CONFIRMED,
+                fee=1500.0, admin_notes="Confirmed. Please arrive 15 mins early."),
+        Booking(facility_id=f2.id, citizen_id=c2.id,
+                booking_date=date(2026, 7, 15), start_time=dtime(7, 0), end_time=dtime(9, 0),
+                purpose="Youth Cricket Practice", attendees=22, status=BookingStatus.PENDING,
+                fee=200.0),
+        Booking(facility_id=f3.id, citizen_id=c3.id,
+                booking_date=date(2026, 7, 20), start_time=dtime(14, 0), end_time=dtime(16, 0),
+                purpose="NGO Workshop", attendees=30, status=BookingStatus.CONFIRMED,
+                fee=400.0, admin_notes="Please bring your ID proof."),
+        Booking(facility_id=f4.id, citizen_id=c4.id,
+                booking_date=date(2026, 7, 25), start_time=dtime(9, 0), end_time=dtime(11, 0),
+                purpose="Yoga & Fitness Camp", attendees=50, status=BookingStatus.PENDING,
+                fee=0.0),
+        Booking(facility_id=f1.id, citizen_id=c5.id,
+                booking_date=date(2026, 6, 5), start_time=dtime(18, 0), end_time=dtime(21, 0),
+                purpose="Cultural Evening Event", attendees=150, status=BookingStatus.COMPLETED,
+                fee=1500.0, admin_notes="Event completed successfully."),
+    ]
+    db.session.add_all(bookings)
+    db.session.flush()
+
+    # Payments for paid bookings
+    payments = [
+        Payment(booking_id=bookings[0].id, citizen_id=c1.id, amount=1500.0,
+                status=PaymentStatus.PAID, method="upi",
+                transaction_ref=f"TXN{uuid.uuid4().hex[:10].upper()}",
+                paid_at=dt(10)),
+        Payment(booking_id=bookings[1].id, citizen_id=c2.id, amount=200.0,
+                status=PaymentStatus.PENDING, method="online"),
+        Payment(booking_id=bookings[2].id, citizen_id=c3.id, amount=400.0,
+                status=PaymentStatus.PAID, method="netbanking",
+                transaction_ref=f"TXN{uuid.uuid4().hex[:10].upper()}",
+                paid_at=dt(5)),
+        Payment(booking_id=bookings[4].id, citizen_id=c5.id, amount=1500.0,
+                status=PaymentStatus.PAID, method="card",
+                transaction_ref=f"TXN{uuid.uuid4().hex[:10].upper()}",
+                paid_at=dt(35)),
+    ]
+    db.session.add_all(payments)
+
+    db.session.commit()
+    print("[SEED] Database seeded successfully with rich demo data!")
