@@ -50,19 +50,33 @@ patch }` interface, so nothing upstream can tell the difference.
 
 ## Step 2 — Add the dev proxy in `frontend/vite.config.js`
 
-Add a `proxy` entry to the existing `server` block:
+This is the **complete final content** of `frontend/vite.config.js` after the
+change — you can replace the whole file with this (only the `proxy` block is
+new; everything else is unchanged):
 
 ```js
-server: {
-  port: 3000,
-  open: true,
-  proxy: {
-    "/api": {
-      target: "http://localhost:5000",
-      changeOrigin: true,
+import { fileURLToPath, URL } from "node:url"
+import { defineConfig } from "vite"
+import vue from "@vitejs/plugin-vue"
+
+export default defineConfig({
+  plugins: [vue()],
+  resolve: {
+    alias: {
+      "@": fileURLToPath(new URL("./src", import.meta.url)),
     },
   },
-},
+  server: {
+    port: 3000,
+    open: true,
+    proxy: {
+      "/api": {
+        target: "http://localhost:5000",
+        changeOrigin: true,
+      },
+    },
+  },
+})
 ```
 
 The browser keeps talking to `localhost:3000`; Vite silently forwards every
