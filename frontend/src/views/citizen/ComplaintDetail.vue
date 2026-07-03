@@ -40,12 +40,6 @@
                 <div class="detail-label">Ward</div>
                 <div class="detail-value">{{ complaint.ward }}</div>
               </div>
-              <div class="detail-row" v-if="complaint.latitude != null && complaint.longitude != null">
-                <div class="detail-label">Map</div>
-                <div class="detail-value">
-                  <LocationPicker :lat="complaint.latitude" :lng="complaint.longitude" readonly />
-                </div>
-              </div>
               <div class="detail-row">
                 <div class="detail-label">Description</div>
                 <div class="detail-value">{{ complaint.description }}</div>
@@ -142,7 +136,6 @@ import { ref, onMounted } from 'vue'
 import { useRoute } from 'vue-router'
 import AppSidebar from '../../components/AppSidebar.vue'
 import AppTopbar from '../../components/AppTopbar.vue'
-import LocationPicker from '../../components/LocationPicker.vue'
 import ResolveActions from '../../components/ResolveActions.vue'
 import ImageGallery from '../../components/ImageGallery.vue'
 import api from '../../api'

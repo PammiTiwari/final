@@ -6,7 +6,6 @@
       <div class="content-area">
         <div class="page-header">
           <div class="page-header-left">
-            <h1>Notifications</h1>
             <p>Stay updated on your complaints and activities</p>
           </div>
           <button class="btn btn-secondary" @click="markAllRead" v-if="unreadCount > 0">

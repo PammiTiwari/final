@@ -6,7 +6,6 @@
       <div class="content-area">
         <div class="page-header">
           <div class="page-header-left">
-            <h1>Assigned Complaints</h1>
             <p>Complaints assigned to you for action</p>
           </div>
         </div>

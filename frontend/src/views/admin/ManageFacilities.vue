@@ -6,7 +6,6 @@
       <div class="content-area">
         <div class="page-header flex-between">
           <div>
-            <h1>Public Facilities</h1>
             <p>Add, edit and manage civic facilities available for booking</p>
           </div>
           <button class="btn btn-primary" @click="openAdd">+ Add Facility</button>

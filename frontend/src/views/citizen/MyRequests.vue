@@ -6,7 +6,6 @@
       <div class="content-area">
         <div class="page-header">
           <div class="page-header-left">
-            <h1>My Complaints</h1>
             <p>Track all your submitted complaints</p>
           </div>
           <router-link to="/submit" class="btn btn-primary">+ Submit New</router-link>

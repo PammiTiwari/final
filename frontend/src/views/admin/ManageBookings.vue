@@ -5,7 +5,6 @@
       <AppTopbar title="Manage Bookings" :unread-count="unread" @notifications="showNotif = true" />
       <div class="content-area">
         <div class="page-header">
-          <h1>Facility Bookings</h1>
           <p>Review and manage all facility booking requests</p>
         </div>
 

@@ -6,7 +6,6 @@
       <div class="content-area">
         <div class="page-header flex-between">
           <div>
-            <h1>My Facility Bookings</h1>
             <p>Track all your facility booking requests and their status</p>
           </div>
           <router-link to="/facilities" class="btn btn-primary">+ New Booking</router-link>

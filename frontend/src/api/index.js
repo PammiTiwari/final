@@ -9,6 +9,21 @@ import {
 
 const delay = (ms = 80) => new Promise(r => setTimeout(r, ms))
 
+// Mirrors backend/apps/models.py DEPT_MAP — a request's department is always
+// derived from its category, from the moment it's submitted, never left blank
+// until an admin assigns it.
+const DEPT_MAP = {
+  road: "Road Maintenance",
+  electricity: "Electricity Department",
+  water: "Water Supply Department",
+  sanitation: "Sanitation Department",
+  waste: "Sanitation Department",
+  parks: "Parks & Public Spaces",
+  complaint: "General Affairs",
+  maintenance: "General Affairs",
+  other: "General Affairs",
+}
+
 // Base64 data URLs (not blob: URLs) so the picked photo keeps rendering even
 // after a page reload — blob URLs are only valid for the page load that made them.
 function fileToDataUrl(file) {
@@ -127,7 +142,8 @@ async function handle(method, url, body) {
     return { data: REQUESTS }
   }
   if (M === "POST" && path === "/requests") {
-    const newReq = { id: REQUESTS.length + 1, cmp_id: `CMP-00${REQUESTS.length + 1}`, citizen_id: user?.id, citizen_name: user?.name, status: "pending", priority: "medium", upvotes: 0, needs_funds: false, hold_reason: null, image_urls: [], evidence_urls: [], assigned_to_name: null, created_at: new Date().toISOString(), updated_at: new Date().toISOString(), ...body }
+    const nextId = REQUESTS.reduce((max, r) => Math.max(max, r.id), 0) + 1
+    const newReq = { id: nextId, cmp_id: `CMP${String(nextId).padStart(4, "0")}`, citizen_id: user?.id, citizen_name: user?.name, status: "pending", priority: "medium", upvotes: 0, needs_funds: false, hold_reason: null, image_urls: [], evidence_urls: [], assignment: null, created_at: new Date().toISOString(), updated_at: new Date().toISOString(), ...body, department: DEPT_MAP[body?.category] || "General Affairs" }
     REQUESTS.push(newReq)
     return { data: newReq }
   }
@@ -144,9 +160,32 @@ async function handle(method, url, body) {
     if (M === "GET") return { data: req || null }
     if (M === "PUT" && reqMatch.rest === "/status") {
       if (req) {
-        Object.assign(req, { status: body?.status || req.status, hold_reason: body?.hold_reason || req.hold_reason, updated_at: new Date().toISOString() })
-        if (body?.evidence_urls?.length) req.evidence_urls = body.evidence_urls
-        if (body?.status === "closed" && user?.role === "citizen") {
+        const newStatus = body?.status || req.status
+        if (user?.role === "staff") {
+          if (!req.assignment || req.assignment.staff_id !== user.id) {
+            return Promise.reject({ response: { status: 403, data: { message: "Not your assignment" } } })
+          }
+          if (req.status === "closed") {
+            return Promise.reject({ response: { status: 400, data: { message: "Citizen has closed this request — it can no longer be changed" } } })
+          }
+          if (req.status === "on_hold_weather") {
+            return Promise.reject({ response: { status: 400, data: { message: "This request is on hold for weather restrictions — an admin needs to resume it first" } } })
+          }
+          if (req.status === "resolved") {
+            return Promise.reject({ response: { status: 400, data: { message: "This request is already resolved — no further updates until the citizen reopens or closes it" } } })
+          }
+          if (!["in_progress", "resolved"].includes(newStatus)) {
+            return Promise.reject({ response: { status: 400, data: { message: "Staff can only mark in_progress or resolved" } } })
+          }
+        } else if (user?.role === "citizen") {
+          if (newStatus === "closed" && req.status !== "resolved") {
+            return Promise.reject({ response: { status: 400, data: { message: "Only a resolved complaint can be closed" } } })
+          }
+        }
+        Object.assign(req, { status: newStatus, hold_reason: body?.hold_reason || req.hold_reason, updated_at: new Date().toISOString() })
+        if (body?.admin_notes) req.admin_notes = body.admin_notes
+        if (body?.evidence_urls?.length && newStatus === "resolved") req.evidence_urls = body.evidence_urls
+        if (newStatus === "closed" && user?.role === "citizen") {
           if (body?.rating != null) req.rating = body.rating
           if (body?.feedback) req.feedback = body.feedback.trim()
         }
@@ -182,8 +221,27 @@ async function handle(method, url, body) {
   if (M === "POST" && path === "/assignments") {
     const req     = REQUESTS.find(r => r.id === body?.request_id)
     const officer = OFFICERS.find(o => o.id === (body?.staff_id || body?.officer_id))
-    if (req && officer) { req.status = "assigned"; req.assigned_to_name = officer.name; req.department = officer.department; req.updated_at = new Date().toISOString() }
-    return { data: { success: true, staff_department: officer?.department, assignment: { officer_name: officer?.name } } }
+    if (!req || !officer) {
+      return Promise.reject({ response: { status: 400, data: { message: "Invalid request or officer" } } })
+    }
+    const wasReassign = !!req.assignment
+    const assignment = {
+      id: req.assignment?.id || REQUESTS.reduce((max, r) => Math.max(max, r.assignment?.id || 0), 0) + 1,
+      request_id: req.id,
+      staff_id: officer.id,
+      staff_name: officer.name,
+      staff_department: officer.department,
+      assigned_by: user?.id,
+      notes: body?.notes || "",
+      assigned_at: new Date().toISOString(),
+      completed_at: null,
+    }
+    req.assignment = assignment
+    req.status = wasReassign ? "reassigned" : "assigned"
+    req.department = officer.department
+    req.admin_notes = body?.notes || `${wasReassign ? "Reassigned" : "Assigned"} to ${officer.name} (${officer.department})`
+    req.updated_at = new Date().toISOString()
+    return { data: assignment }
   }
   const asgMatch = matchId(path, "/assignments")
   if (asgMatch && M === "PUT") {

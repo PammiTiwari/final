@@ -6,7 +6,6 @@
       <div class="content-area">
         <div class="page-header">
           <div class="page-header-left">
-            <h1>Departments</h1>
             <p>Manage city departments and officer assignments</p>
           </div>
           <button class="btn btn-primary" @click="openAdd">+ Add Department</button>

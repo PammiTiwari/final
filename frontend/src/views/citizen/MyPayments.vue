@@ -7,7 +7,6 @@
 
         <div class="page-header">
           <div class="page-header-left">
-            <h1>My Payments</h1>
             <p>History of all payment transactions for facility bookings</p>
           </div>
         </div>

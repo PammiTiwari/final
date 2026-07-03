@@ -7,7 +7,14 @@ MAX_IMAGES = 3
 
 
 def _dump_urls(urls):
-    return json.dumps(list(urls or [])[:MAX_IMAGES])
+    if urls is None:
+        urls = []
+    elif isinstance(urls, str):
+        # A bare string would otherwise be iterated character-by-character.
+        urls = [urls]
+    elif not isinstance(urls, (list, tuple)):
+        urls = []
+    return json.dumps(list(urls)[:MAX_IMAGES])
 
 
 def _load_urls(raw):

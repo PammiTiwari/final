@@ -6,7 +6,6 @@
       <div class="content-area">
         <div class="page-header">
           <div class="page-header-left">
-            <h1>Submit a New Complaint</h1>
             <p>Report a civic issue in your area</p>
           </div>
         </div>
@@ -63,9 +62,9 @@
               <p v-if="aiMessage" class="ai-hint">{{ aiMessage }}</p>
             </div>
 
-            <div class="form-group" v-if="form.title">
-              <label>Title</label>
-              <input v-model="form.title" type="text" class="form-control" placeholder="Short summary" />
+            <div class="form-group">
+              <label>Title <span class="req">*</span></label>
+              <input v-model="form.title" type="text" class="form-control" placeholder="Short summary" required />
             </div>
 
             <div class="form-group">

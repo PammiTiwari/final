@@ -29,7 +29,6 @@
         <div class="content-area">
           <div class="page-header">
             <div class="page-header-left">
-              <h1>Track Your Complaint</h1>
               <p>Enter your complaint ID to check the current status</p>
             </div>
           </div>

@@ -148,125 +148,56 @@ def _seed_data():
     ]
     db.session.add_all(facilities)
 
-    # ── Service Requests (20 complaints) ──────────────────────────────────────
-    # Every photo below was manually opened and checked — several stock files are
-    # mislabeled (e.g. "manhole.jpg" is actually an open street drain, "water-pipe.jpg"
-    # is an intact water tower, "dirty-water.jpg" is a water-relief tanker truck,
-    # "park-bench.jpg" is a well-kept playground). Assignments here match what the
-    # photo actually shows, not the filename. Where no photo genuinely fits, the
-    # complaint is left with 0 images rather than forcing a mismatch.
+    # ── Service Requests (8 complaints — a small, deliberately curated set) ─────
+    # Every photo below was manually opened and checked (filenames are not always
+    # accurate — e.g. "manhole.jpg" is actually an open street drain). No photo is
+    # shared between two different complaints, and no "before" photo contradicts
+    # its own "after" evidence — e.g. dark-street.jpg (working, lit lamps) only
+    # ever appears as the RESOLVED evidence for the power-outage complaint, never
+    # as a "before" photo for a still-broken streetlight elsewhere.
     requests_data = [
-        # Road issues (assigned to Rajesh)
-        # Road issues
         dict(citizen_id=c1.id, category="road", title="Large potholes on MG Road causing accidents",
              description="There are multiple large potholes near the main junction on MG Road. Three vehicles have been damaged this week. Requires urgent repair.",
              address="MG Road Junction, Preetam Nagar (Ward-1)", ward="Ward-1", priority=Priority.URGENT,
              status=RequestStatus.IN_PROGRESS, created_at=dt(12), staff=o1, notes="Assigned to road repair team. Work started.",
-             image_urls=["/api/uploads/pothole.jpg", "/api/uploads/footpath.jpg", "/api/uploads/road-damage.jpg"]),
-        dict(citizen_id=c2.id, category="road", title="Damaged footpath near school",
-             description="The footpath outside the school on Park Street is completely broken. Students are forced to walk on the road. Very dangerous situation.",
-             address="Park Street, near School, Preetam Nagar (Ward-2)", ward="Ward-2", priority=Priority.HIGH,
-             status=RequestStatus.PENDING, created_at=dt(8)),
-        dict(citizen_id=c3.id, category="road", title="Road cave-in at Nehru Chowk",
-             description="A section of road near Nehru Chowk has caved in after recent rains. The hole is about 3 feet deep and very dangerous for traffic.",
-             address="Nehru Chowk, Preetam Nagar (Ward-3)", ward="Ward-3", priority=Priority.URGENT,
-             status=RequestStatus.RESOLVED, created_at=dt(20), resolved_at=dt(15), staff=o1, notes="Road fully repaired and patched.",
-             image_urls=["/api/uploads/road-damage.jpg"]),
-        dict(citizen_id=c4.id, category="road", title="Speed breaker needed near temple",
-             description="Vehicles overspeed near the temple on Temple Road. Many accidents have happened. Please install a speed breaker.",
-             address="Temple Road, Preetam Nagar (Ward-4)", ward="Ward-4", priority=Priority.MEDIUM,
-             status=RequestStatus.PENDING, created_at=dt(5)),
-
-        # Electricity issues
+             image_urls=["/api/uploads/pothole.jpg", "/api/uploads/footpath.jpg"]),
         dict(citizen_id=c1.id, category="electricity", title="Street light not working near Block A park",
              description="The street light near the Block A park has not been working for 3 days. It is very unsafe to walk at night. Children play in this area.",
              address="Block A Park Gate, Preetam Nagar (Ward-1)", ward="Ward-1", priority=Priority.HIGH,
              status=RequestStatus.IN_PROGRESS, created_at=dt(3), staff=o2, notes="Maintenance team assigned. Bulb replacement in progress.",
-             image_urls=["/api/uploads/streetlight.jpg", "/api/uploads/dark-street.jpg"]),
-        dict(citizen_id=c2.id, category="electricity", title="Multiple streetlights down on Park Street",
-             description="At least 5 streetlights on Park Street have been non-functional for a week. The entire street is dark at night which is dangerous.",
-             address="Park Street, Preetam Nagar (Ward-2)", ward="Ward-2", priority=Priority.HIGH,
-             status=RequestStatus.ASSIGNED, created_at=dt(6), staff=o2, notes="Inspected. Parts ordered.",
-             image_urls=["/api/uploads/dark-street.jpg"]),
-        dict(citizen_id=c5.id, category="electricity", title="Electrical pole leaning dangerously",
-             description="An electrical pole on Main Road is leaning at a dangerous angle. It might fall any time. Please fix immediately.",
-             address="Main Road, Preetam Nagar (Ward-5)", ward="Ward-5", priority=Priority.URGENT,
-             status=RequestStatus.PENDING, created_at=dt(1),
-             image_urls=["/api/uploads/electric-pole.jpg"]),
+             image_urls=["/api/uploads/streetlight.jpg", "/api/uploads/electric-pole.jpg"]),
+        dict(citizen_id=c3.id, category="road", title="Road cave-in at Nehru Chowk",
+             description="A section of road near Nehru Chowk has caved in after recent rains. The hole is about 3 feet deep and very dangerous for traffic.",
+             address="Nehru Chowk, Preetam Nagar (Ward-3)", ward="Ward-3", priority=Priority.URGENT,
+             status=RequestStatus.RESOLVED, created_at=dt(20), resolved_at=dt(15), staff=o1, notes="Road fully repaired and patched.",
+             image_urls=["/api/uploads/road-damage.jpg"], evidence_urls=["/api/uploads/road-repaired.jpg"]),
         dict(citizen_id=c3.id, category="electricity", title="Power outage affecting entire block",
              description="Our entire residential block has had no electricity for 2 days. The transformer may have blown. Please send a technician.",
              address="Civil Lines Road, Preetam Nagar (Ward-3)", ward="Ward-3", priority=Priority.URGENT,
              status=RequestStatus.RESOLVED, created_at=dt(15), resolved_at=dt(13), staff=o2, notes="Transformer replaced. Power restored.",
-             evidence_urls=["/api/uploads/streetlight.jpg"]),
-
-        # Water issues
-        dict(citizen_id=c4.id, category="water", title="Water pipeline leakage on Green Avenue",
-             description="There is a major water pipeline leakage on Green Avenue. Water has been flooding the road for 2 days. Huge wastage of water.",
-             address="Green Avenue, Preetam Nagar (Ward-4)", ward="Ward-4", priority=Priority.HIGH,
-             status=RequestStatus.IN_PROGRESS, created_at=dt(4), staff=o3, notes="Crew deployed. Pipe repair underway.",
-             image_urls=["/api/uploads/flooding.jpg"]),
-        dict(citizen_id=c1.id, category="water", title="No water supply for 3 days",
-             description="Our area has not received any water supply for 3 consecutive days. We are facing severe hardship. Please restore supply immediately.",
-             address="Block A, MG Road, Preetam Nagar (Ward-1)", ward="Ward-1", priority=Priority.URGENT,
-             status=RequestStatus.PENDING, created_at=dt(3),
-             image_urls=["/api/uploads/dirty-water.jpg", "/api/uploads/water-pipe.jpg"]),
-        dict(citizen_id=c5.id, category="water", title="Contaminated drinking water complaints",
-             description="The water coming from our taps has an unusual smell and yellowish colour. Residents fear it may be contaminated. Please check urgently.",
-             address="Nehru Colony, Preetam Nagar (Ward-5)", ward="Ward-5", priority=Priority.URGENT,
-             status=RequestStatus.ASSIGNED, created_at=dt(7), staff=o3, notes="Water sample taken for testing."),
-        dict(citizen_id=c2.id, category="water", title="Clogged drainage causing flooding",
-             description="The main drainage channel near our colony is completely blocked. Rainwater is flooding homes. Please clear immediately.",
-             address="Colony Gate, Preetam Nagar (Ward-2)", ward="Ward-2", priority=Priority.HIGH,
-             status=RequestStatus.RESOLVED, created_at=dt(18), resolved_at=dt(16), staff=o3, notes="Drainage cleared. Good for monsoon season.",
-             image_urls=["/api/uploads/manhole.jpg", "/api/uploads/flooding.jpg"],
-             evidence_urls=["/api/uploads/recreation-park.jpg"]),
-
-        # Sanitation/Waste issues
+             evidence_urls=["/api/uploads/dark-street.jpg"]),
         dict(citizen_id=c3.id, category="waste", title="Garbage not collected for a week",
              description="Garbage has not been collected from our area for over a week. The garbage is piling up and causing health hazards. Rats and flies are increasing.",
              address="Civil Lines Road, Preetam Nagar (Ward-3)", ward="Ward-3", priority=Priority.HIGH,
              status=RequestStatus.PENDING, created_at=dt(7),
              image_urls=["/api/uploads/garbage.jpg", "/api/uploads/garbage-bins.jpg"]),
-        dict(citizen_id=c4.id, category="sanitation", title="Overflowing garbage bins at market",
-             description="The garbage bins at the local market are overflowing. The stench is unbearable and it's a major health concern for shopkeepers and buyers.",
-             address="Main Market, Preetam Nagar (Ward-4)", ward="Ward-4", priority=Priority.HIGH,
-             status=RequestStatus.IN_PROGRESS, created_at=dt(5), staff=o4, notes="Extra garbage truck deployed.",
-             image_urls=["/api/uploads/garbage-bins.jpg", "/api/uploads/garbage.jpg"]),
-        dict(citizen_id=c5.id, category="sanitation", title="Open defecation in public area",
-             description="People are defecating in the open near the Railway Road crossing. No public toilets are available. This is a serious health and hygiene issue.",
-             address="Railway Road, Preetam Nagar (Ward-5)", ward="Ward-5", priority=Priority.URGENT,
-             status=RequestStatus.RESOLVED, created_at=dt(25), resolved_at=dt(20), staff=o4, notes="Mobile toilet installed. Area cleaned."),
-
-        # Parks & Public Spaces
+        dict(citizen_id=c2.id, category="water", title="Clogged drainage causing flooding",
+             description="The main drainage channel near our colony is completely blocked. Rainwater is flooding homes. Please clear immediately.",
+             address="Colony Gate, Preetam Nagar (Ward-2)", ward="Ward-2", priority=Priority.HIGH,
+             status=RequestStatus.RESOLVED, created_at=dt(18), resolved_at=dt(16), staff=o3, notes="Drainage cleared. Good for monsoon season.",
+             image_urls=["/api/uploads/manhole.jpg"],
+             evidence_urls=["/api/uploads/garbage-collected.jpg"]),
         dict(citizen_id=c1.id, category="parks", title="Broken playground equipment in Block A park",
              description="The slides and swings in the Block A park are broken and rusted. Children have been injured. Please repair or replace the equipment.",
              address="Block A Park, Preetam Nagar (Ward-1)", ward="Ward-1", priority=Priority.MEDIUM,
-             status=RequestStatus.PENDING, created_at=dt(10),
-             image_urls=["/api/uploads/playground.jpg"]),
-        dict(citizen_id=c2.id, category="parks", title="Trees blocking CCTV cameras",
-             description="Overgrown trees on Main Boulevard are completely blocking the CCTV cameras installed for security. Crime has increased in the area.",
-             address="Main Boulevard, Preetam Nagar (Ward-2)", ward="Ward-2", priority=Priority.MEDIUM,
-             status=RequestStatus.ASSIGNED, created_at=dt(9), staff=o5, notes="Tree trimming crew scheduled for next week.",
-             image_urls=["/api/uploads/trees.jpg"]),
-        dict(citizen_id=c3.id, category="parks", title="Public toilet in bad condition",
-             description="The public toilet near the Civil Lines Road bus stop is in a terrible condition. No water, broken doors, and very unhygienic. Please renovate.",
-             address="Civil Lines Road Bus Stop, Preetam Nagar (Ward-3)", ward="Ward-3", priority=Priority.HIGH,
-             status=RequestStatus.RESOLVED, created_at=dt(30), resolved_at=dt(25), staff=o5, notes="Toilet renovated and cleaned. New doors installed."),
-        dict(citizen_id=c4.id, category="parks", title="Damaged benches in community park",
-             description="Most park benches in the community park are broken and rusted. Elderly citizens have no place to sit. Request immediate repair.",
-             address="Community Park Road, Preetam Nagar (Ward-4)", ward="Ward-4", priority=Priority.LOW,
-             status=RequestStatus.PENDING, created_at=dt(14)),
-        dict(citizen_id=c5.id, category="other", title="Stray dogs menace in residential area",
-             description="A large group of stray dogs in Nehru Colony is threatening residents, especially children and elderly. Two people bitten last week.",
+             status=RequestStatus.CLOSED, created_at=dt(10), resolved_at=dt(4), staff=o5, notes="Old equipment removed and new playset installed.",
+             image_urls=["/api/uploads/playground.jpg"], evidence_urls=["/api/uploads/playground-repaired.jpg"],
+             rating=5, feedback="Great work — the new playset is wonderful, kids love it!"),
+        dict(citizen_id=c5.id, category="sanitation", title="Blocked sewage drain overflowing in Nehru Colony",
+             description="The open sewage drain in Nehru Colony is completely blocked with rags and plastic waste. Dirty water is stagnating and overflowing near homes, and the foul smell is unbearable. Needs urgent cleaning.",
              address="Nehru Colony, Preetam Nagar (Ward-5)", ward="Ward-5", priority=Priority.HIGH,
-             status=RequestStatus.CLOSED, created_at=dt(35), resolved_at=dt(30), staff=o4, notes="Animal control team visited. Dogs vaccinated and relocated.",
-             image_urls=["/api/uploads/stray-dog.jpg"],
-             evidence_urls=["/api/uploads/recreation-park.jpg"]),
-        dict(citizen_id=c1.id, category="road", title="Missing manhole cover on MG Road",
-             description="A manhole cover is missing on MG Road near the school. This is extremely dangerous especially for two-wheelers. Could cause fatal accidents.",
-             address="MG Road, School Junction, Preetam Nagar (Ward-1)", ward="Ward-1", priority=Priority.URGENT,
-             status=RequestStatus.IN_PROGRESS, created_at=dt(2), staff=o1, notes="Cover ordered. Temporary barricade placed.",
-             image_urls=["/api/uploads/road-damage.jpg"]),
+             status=RequestStatus.ASSIGNED, created_at=dt(2), staff=o4, notes="Sanitation crew scheduled to clear the blocked drain this week.",
+             image_urls=["/api/uploads/sewage-drain.jpg"]),
     ]
 
     created_requests = []
@@ -287,35 +218,21 @@ def _seed_data():
                           notes=notes, assigned_at=r.created_at + timedelta(hours=2))
             if r.status in [RequestStatus.RESOLVED, RequestStatus.CLOSED]:
                 a.completed_at = r.resolved_at
+            r.admin_notes = notes
             db.session.add(a)
 
-    # ── Community Posts ───────────────────────────────────────────────────────
+    # ── Community Posts (5 — kept small, no images on announcements) ──────────
     posts = [
         Post(citizen_id=c1.id,
              content="Street light not working near Block A park since 3 days. Very unsafe for evening walkers. Please fix it urgently! @ElectricityDept",
              category="general", location="Block A Park, Preetam Nagar (Ward-1)", ward="Ward-1",
-             image_urls=["/api/uploads/dark-street.jpg", "/api/uploads/streetlight.jpg"],
+             image_urls=["/api/uploads/electric-pole.jpg", "/api/uploads/streetlight.jpg"],
              created_at=dt(0, hour=8)),
         Post(citizen_id=c2.id,
              content="Garbage not collected from our area last 2 days. The smell is unbearable and we can see rats near the garbage dump. Please take action!",
              category="general", location="Park Street, Preetam Nagar (Ward-2)", ward="Ward-2",
              image_urls=["/api/uploads/garbage.jpg", "/api/uploads/garbage-bins.jpg"],
              created_at=dt(0, hour=11)),
-        Post(citizen_id=c3.id,
-             content="The pothole on MG Road near the main junction is getting bigger every day. A motorcycle rider fell down yesterday. Authorities please act fast!",
-             category="general", location="MG Road Junction, Preetam Nagar (Ward-1)", ward="Ward-1",
-             image_urls=["/api/uploads/pothole.jpg"],
-             created_at=dt(1, hour=9)),
-        Post(citizen_id=c4.id,
-             content="Water supply has been irregular for the past week in our part of Preetam Nagar. We receive water only for 30 minutes daily which is not enough. Request attention.",
-             category="general", location="Green Avenue, Preetam Nagar (Ward-4)", ward="Ward-4",
-             image_urls=["/api/uploads/dirty-water.jpg"],
-             created_at=dt(1, hour=14)),
-        Post(citizen_id=c5.id,
-             content="The children's park near Nehru Colony is in terrible condition. Broken swings, no lights, and garbage everywhere. Can the parks dept please help?",
-             category="general", location="Nehru Colony Park, Preetam Nagar (Ward-5)", ward="Ward-5",
-             image_urls=["/api/uploads/playground.jpg"],
-             created_at=dt(2, hour=10)),
         Post(citizen_id=c1.id,
              content="Successfully got the pothole repaired near my house in just 5 days after submitting the complaint. Thank you Road Maintenance team! Great initiative by the colony administration.",
              category="general", location="Block A, Preetam Nagar (Ward-1)", ward="Ward-1",
@@ -330,15 +247,6 @@ def _seed_data():
              content="Join us for a Clean Colony Drive on 25 May 2024 at Central Park, Preetam Nagar. Bring gloves and bags. Free refreshments for all participants. Let's make our colony cleaner together! Register at the civic center.",
              category="announcement", location="Central Park, Preetam Nagar (Central)", ward="Central",
              is_official=True, created_at=dt(6, hour=10)),
-        Post(citizen_id=admin.id,
-             title="Monsoon Preparedness Advisory",
-             content="With monsoon season approaching, we urge residents to report drainage blockages immediately. Our teams are on standby. Please avoid waterlogged roads and report any flooding to our helpline: 1800-CIVIC-00. Stay safe!",
-             category="announcement", location="All of Preetam Nagar", ward="Central",
-             is_official=True, created_at=dt(7, hour=11)),
-        Post(citizen_id=c2.id,
-             content="Amazing to see the colony administration taking quick action on complaints. My water leakage complaint was resolved in just 3 days! The system is working. Keep it up!",
-             category="general", location="Park Street, Preetam Nagar (Ward-2)", ward="Ward-2",
-             created_at=dt(4, hour=15)),
     ]
     db.session.add_all(posts)
     db.session.flush()
@@ -355,25 +263,14 @@ def _seed_data():
         PostComment(post_id=posts[1].id, user_id=o4.id,
                     content="Our team has been informed. Collection vehicle will reach your area today by 4 PM.",
                     is_official=True, created_at=dt(0, hour=12)),
-        PostComment(post_id=posts[2].id, user_id=c4.id,
-                    content="I've been reporting this pothole for 2 months! Still not fixed.", created_at=dt(1, hour=9, minute=30)),
-        PostComment(post_id=posts[2].id, user_id=o1.id,
-                    content="Work order has been issued. Our crew will be at the site tomorrow morning.",
-                    is_official=True, created_at=dt(1, hour=10)),
-        PostComment(post_id=posts[3].id, user_id=c5.id,
-                    content="We face the same in Ward-5. Only 20 minutes of water daily!", created_at=dt(1, hour=14, minute=30)),
-        PostComment(post_id=posts[4].id, user_id=c1.id,
-                    content="Please repair the park near our area too! Kids have no safe place to play.", created_at=dt(2, hour=10, minute=30)),
     ]
     db.session.add_all(comments)
 
     # Add likes
     likes_data = [
         (posts[0].id, c2.id), (posts[0].id, c3.id), (posts[0].id, c4.id),
-        (posts[1].id, c1.id), (posts[1].id, c3.id), (posts[1].id, c5.id),
-        (posts[2].id, c1.id), (posts[2].id, c4.id), (posts[2].id, c5.id),
-        (posts[5].id, c2.id), (posts[5].id, c3.id),
-        (posts[9].id, c1.id), (posts[9].id, c3.id), (posts[9].id, c5.id),
+        (posts[1].id, c1.id), (posts[1].id, c3.id),
+        (posts[2].id, c2.id), (posts[2].id, c3.id), (posts[2].id, c5.id),
     ]
     for post_id, user_id in likes_data:
         db.session.add(PostLike(post_id=post_id, user_id=user_id))
@@ -382,12 +279,10 @@ def _seed_data():
     notifs = [
         Notification(user_id=c1.id, title="Complaint Assigned", message="Your complaint CMP0001 (Large potholes on MG Road) has been assigned to Road Maintenance Department.", notif_type="info"),
         Notification(user_id=c1.id, title="Complaint In Progress", message="Work has started on your complaint CMP0001. Expected completion in 3-5 days.", notif_type="info"),
-        Notification(user_id=c2.id, title="Complaint Assigned", message="Your complaint CMP0006 (Multiple streetlights down on Park Street) has been assigned to Electricity Department.", notif_type="info"),
         Notification(user_id=c3.id, title="Complaint Resolved", message="Your complaint CMP0003 (Road cave-in at Nehru Chowk) has been resolved. Please verify and close.", notif_type="success"),
-        Notification(user_id=c4.id, title="Complaint In Progress", message="Work has started on your complaint CMP0009 (Water pipeline leakage). Our crew is on site.", notif_type="info"),
+        Notification(user_id=c1.id, title="Complaint In Progress", message="Work has started on your complaint CMP0002 (Street light not working). Our crew is on site.", notif_type="info"),
         Notification(user_id=o1.id, title="New Assignment", message="You have been assigned complaint CMP0001 - Large potholes on MG Road. Please take action.", notif_type="warning"),
-        Notification(user_id=o2.id, title="New Assignment", message="You have been assigned complaint CMP0005 - Street light not working near Sector 5 park.", notif_type="warning"),
-        Notification(user_id=admin.id, title="New Complaints", message="5 new complaints have been submitted in the last 24 hours. Please review and assign.", notif_type="info"),
+        Notification(user_id=admin.id, title="New Complaints", message="A few new complaints have been submitted in the last 24 hours. Please review and assign.", notif_type="info"),
     ]
     db.session.add_all(notifs)
 

@@ -5,7 +5,6 @@
       <AppTopbar title="Book a Facility" :unread-count="unread" @notifications="showNotif = true" />
       <div class="content-area">
         <div class="page-header">
-          <h1>Public Facilities</h1>
           <p>Browse and book community halls, sports grounds, parks and more.</p>
         </div>
 

@@ -22,10 +22,6 @@
 
             <div class="detail-row"><div class="detail-label">Category</div><div class="detail-value capitalize">{{ complaint.category }}</div></div>
             <div class="detail-row"><div class="detail-label">Location</div><div class="detail-value">{{ complaint.address }}</div></div>
-            <div class="detail-row" v-if="complaint.latitude != null && complaint.longitude != null">
-              <div class="detail-label">Map</div>
-              <div class="detail-value"><LocationPicker :lat="complaint.latitude" :lng="complaint.longitude" readonly /></div>
-            </div>
             <div class="detail-row"><div class="detail-label">Description</div><div class="detail-value">{{ complaint.description }}</div></div>
             <div v-if="complaint.image_urls?.length" class="detail-row">
               <div class="detail-label">Photos</div>
@@ -33,6 +29,10 @@
             </div>
             <div class="detail-row"><div class="detail-label">Citizen</div><div class="detail-value">{{ complaint.citizen_name }} ({{ complaint.citizen_phone || 'no phone on file' }})</div></div>
             <div class="detail-row"><div class="detail-label">Submitted On</div><div class="detail-value">{{ fmtDate(complaint.created_at) }}</div></div>
+            <div class="detail-row" v-if="complaint.admin_notes">
+              <div class="detail-label">Remarks</div>
+              <div class="detail-value">{{ complaint.admin_notes }}</div>
+            </div>
             <div class="detail-row" v-if="complaint.rating">
               <div class="detail-label">Citizen Rating</div>
               <div class="detail-value">
@@ -97,7 +97,6 @@ import { ref, onMounted } from 'vue'
 import { useRoute } from 'vue-router'
 import AppSidebar from '../../components/AppSidebar.vue'
 import AppTopbar from '../../components/AppTopbar.vue'
-import LocationPicker from '../../components/LocationPicker.vue'
 import ImageGallery from '../../components/ImageGallery.vue'
 import MultiImageUpload from '../../components/MultiImageUpload.vue'
 import api from '../../api'
@@ -159,7 +158,7 @@ function fmtDate(d) {
 .status-select { max-width: 280px; }
 .detail-value :deep(.image-gallery) { max-width: 440px; }
 .rating-stars { display: inline-flex; align-items: center; gap: 0.15rem; font-size: 1.2rem; color: var(--border); }
-.rating-stars span.filled { color: var(--secondary); }
+.rating-stars span.filled { color: #FFC107; }
 .rating-num { font-size: 0.8rem; font-weight: 700; color: var(--text); margin-left: 0.4rem; }
 .rating-feedback { font-size: 0.85rem; color: var(--text); font-style: italic; margin-top: 0.4rem; }
 </style>

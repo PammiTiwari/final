@@ -6,7 +6,6 @@
       <div class="content-area">
         <div class="page-header">
           <div class="page-header-left">
-            <h1>Community Feed</h1>
             <p>Connect with citizens and officials in your area</p>
           </div>
           <button class="btn btn-primary" @click="openCreate">+ Create Post</button>
@@ -101,6 +100,10 @@
             <input v-model="newPost.location" class="form-control" placeholder="Add location…" />
           </div>
           <div class="form-group">
+            <label>Pin location on map <span class="optional-label">(optional)</span></label>
+            <LocationPicker @located="onPostLocated" />
+          </div>
+          <div class="form-group">
             <label>Photos <span class="optional-label">(optional)</span></label>
             <MultiImageUpload v-model="newPost.image_urls" :max="3" />
           </div>
@@ -116,6 +119,7 @@ import AppSidebar from '../../components/AppSidebar.vue'
 import AppTopbar from '../../components/AppTopbar.vue'
 import ImageGallery from '../../components/ImageGallery.vue'
 import MultiImageUpload from '../../components/MultiImageUpload.vue'
+import LocationPicker from '../../components/LocationPicker.vue'
 import { useAuthStore } from '../../stores/auth'
 import api from '../../api'
 
@@ -216,6 +220,11 @@ function resetCreate() {
   newPost.value = { content: '', location: '', image_urls: [] }
 }
 
+function onPostLocated({ address, lat, lng }) {
+  // Fill the location box from the map pin, unless the user already typed one.
+  if (!newPost.value.location) newPost.value.location = address || `${lat}, ${lng}`
+}
+
 async function createPost() {
   if (!canShare.value || postLoading.value) return
   postLoading.value = true
@@ -277,12 +286,12 @@ function timeAgo(d) {
 .badge-inline { margin-left: 0.4rem; font-size: 0.6rem; }
 
 /* Instagram-style create-post modal */
-.create-modal { width: 460px; max-width: 92vw; padding: 0; overflow: hidden; }
+.create-modal { width: 460px; max-width: 92vw; padding: 0; overflow: hidden; display: flex; flex-direction: column; }
 .create-header { display: flex; align-items: center; justify-content: space-between; padding: 0.6rem 0.85rem; border-bottom: 1px solid #FFD1E6; }
 .create-header h2 { font-size: 0.95rem; font-weight: 700; margin: 0; color: #5C1A41; }
 .create-nav { background: none; border: none; font-size: 1.1rem; color: #5C1A41; cursor: pointer; padding: 0.15rem 0.35rem; line-height: 1; }
 .create-action { background: none; border: none; color: #E0218A; font-size: 0.85rem; font-weight: 700; cursor: pointer; padding: 0.15rem 0.35rem; }
 .create-action:disabled { color: #FFD1E6; cursor: default; }
-.create-body { padding: 1rem; }
+.create-body { padding: 1rem; overflow-y: auto; }
 .optional-label { font-weight: 400; color: #D69AB8; }
 </style>

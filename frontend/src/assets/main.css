@@ -411,7 +411,7 @@ select.form-control {
 }
 .detail-row:last-child { border-bottom: none; }
 .detail-label { font-weight: 600; color: var(--text-muted); min-width: 130px; flex-shrink: 0; }
-.detail-value { color: var(--text); }
+.detail-value { color: var(--text); flex: 1; min-width: 0; }
 
 /* ── Avatar initials ── */
 .avatar {

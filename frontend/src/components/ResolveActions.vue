@@ -135,7 +135,7 @@ async function submitReopen() {
 .resolve-note { font-size: 0.82rem; color: #D69AB8; margin-top: 0.6rem; }
 .resolve-feedback { font-size: 0.875rem; color: var(--text); font-style: italic; margin-top: 0.4rem; }
 .stars-static, .stars-input { display: flex; align-items: center; gap: 0.15rem; font-size: 1.5rem; color: var(--border); }
-.stars-static span.filled, .stars-input span.filled { color: var(--secondary); }
+.stars-static span.filled, .stars-input span.filled { color: #FFC107; }
 .stars-input span { cursor: pointer; transition: color 0.1s; }
 .stars-input span:hover { color: #FFC933; }
 .rating-num { font-size: 0.85rem; font-weight: 700; color: var(--text); margin-left: 0.5rem; }

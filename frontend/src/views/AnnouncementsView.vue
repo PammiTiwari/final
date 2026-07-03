@@ -6,7 +6,6 @@
       <div class="content-area">
         <div class="page-header">
           <div class="page-header-left">
-            <h1>Announcements</h1>
             <p>Official notices and updates from city administration</p>
           </div>
           <button v-if="auth.isAdmin" class="btn btn-primary" @click="showCreateAnn = true">+ Post Announcement</button>

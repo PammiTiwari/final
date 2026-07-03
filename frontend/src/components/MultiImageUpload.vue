@@ -1,7 +1,7 @@
 <template>
   <div class="multi-image-upload">
     <!-- Empty state: one large dropzone, not a tiny tile lost in the modal -->
-    <div v-if="!modelValue.length" class="dropzone" :class="{ disabled: uploading }" @click="!uploading && fileInput.click()">
+    <div v-if="!photos.length" class="dropzone" :class="{ disabled: uploading }" @click="!uploading && fileInput.click()">
       <span v-if="uploading" class="add-spinner"></span>
       <template v-else>
         <span class="dz-icon">&#128247;</span>
@@ -12,11 +12,11 @@
 
     <!-- Once photos exist: compact thumbnail row + small add-more tile -->
     <div v-else class="thumbs">
-      <div v-for="(url, i) in modelValue" :key="url" class="thumb">
+      <div v-for="(url, i) in photos" :key="url" class="thumb">
         <img :src="url" alt="Uploaded photo" />
         <button type="button" class="thumb-remove" @click="removeAt(i)">&#x2715;</button>
       </div>
-      <div v-if="modelValue.length < max" class="add-tile" :class="{ disabled: uploading }" @click="!uploading && fileInput.click()">
+      <div v-if="photos.length < max" class="add-tile" :class="{ disabled: uploading }" @click="!uploading && fileInput.click()">
         <span v-if="uploading" class="add-spinner"></span>
         <template v-else>
           <span class="add-icon">+</span>
@@ -26,13 +26,13 @@
     </div>
 
     <input ref="fileInput" type="file" accept="image/*" multiple class="hidden" @change="handleFiles" />
-    <p class="hint">{{ modelValue.length }}/{{ max }} photos &bull; JPG, PNG up to 5MB each</p>
+    <p class="hint">{{ photos.length }}/{{ max }} photos &bull; JPG, PNG up to 5MB each</p>
     <p v-if="error" class="upload-err">{{ error }}</p>
   </div>
 </template>
 
 <script setup>
-import { ref } from 'vue'
+import { ref, computed } from 'vue'
 import api from '../api'
 
 const props = defineProps({
@@ -40,6 +40,8 @@ const props = defineProps({
   max: { type: Number, default: 3 },
 })
 const emit = defineEmits(['update:modelValue'])
+
+const photos = computed(() => props.modelValue || [])
 
 const MAX_SIZE = 5 * 1024 * 1024
 
@@ -56,7 +58,7 @@ async function handleFiles(e) {
   const oversized = files.filter(f => f.size > MAX_SIZE)
   const validFiles = files.filter(f => f.size <= MAX_SIZE)
 
-  const remaining = props.max - props.modelValue.length
+  const remaining = props.max - photos.value.length
   const toUpload = validFiles.slice(0, remaining)
 
   const errors = []
@@ -79,7 +81,7 @@ async function handleFiles(e) {
       const res = await api.post('/upload', fd, { headers: { 'Content-Type': 'multipart/form-data' } })
       urls.push(res.data.url)
     }
-    emit('update:modelValue', [...props.modelValue, ...urls])
+    emit('update:modelValue', [...photos.value, ...urls])
   } catch (err) {
     error.value = err.response?.data?.message || 'Image upload failed. Try again.'
   } finally {
@@ -89,7 +91,7 @@ async function handleFiles(e) {
 }
 
 function removeAt(i) {
-  const next = [...props.modelValue]
+  const next = [...photos.value]
   next.splice(i, 1)
   emit('update:modelValue', next)
 }

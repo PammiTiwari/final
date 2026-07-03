@@ -6,7 +6,6 @@
       <div class="content-area">
         <div class="page-header">
           <div class="page-header-left">
-            <h1>Reports & Analytics</h1>
             <p>Insights on complaint management and department performance</p>
           </div>
         </div>

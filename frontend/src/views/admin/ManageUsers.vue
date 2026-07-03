@@ -5,7 +5,6 @@
       <AppTopbar title="Manage Users" :unread-count="unread" @notifications="showNotif = true" />
       <div class="content-area">
         <div class="page-header">
-          <h1>User Management</h1>
           <p>View and manage all citizens and staff members</p>
         </div>
 

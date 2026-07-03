@@ -6,7 +6,6 @@
       <div class="content-area">
         <div class="page-header">
           <div class="page-header-left">
-            <h1>Complaints Management</h1>
             <p>View and manage all citizen complaints</p>
           </div>
         </div>
@@ -460,7 +459,7 @@ function fmtDate(d) {
 .hold-section { margin-top: 1.25rem; padding-top: 1rem; border-top: 1px solid #FFD1E6; }
 .assign-label { font-size: 0.78rem; font-weight: 600; display: block; margin-bottom: 0.25rem; }
 .rating-stars { display: inline-flex; align-items: center; gap: 0.15rem; font-size: 1.2rem; color: var(--border); }
-.rating-stars span.filled { color: var(--secondary); }
+.rating-stars span.filled { color: #FFC107; }
 .rating-num { font-size: 0.8rem; font-weight: 700; color: var(--text); margin-left: 0.4rem; }
 .rating-feedback { font-size: 0.85rem; color: var(--text); font-style: italic; margin-top: 0.4rem; }
 </style>

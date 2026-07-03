@@ -149,13 +149,9 @@
 </template>
 
 <script setup>
-import { useAuthStore } from '../stores/auth'
-import { useRouter } from 'vue-router'
 import { onMounted, ref } from 'vue'
 import api from '../api'
 
-const auth = useAuthStore()
-const router = useRouter()
 const stats = ref({})
 
 function fmtNum(n) {
@@ -163,12 +159,6 @@ function fmtNum(n) {
 }
 
 onMounted(() => {
-  if (auth.isLoggedIn) {
-    if (auth.isCitizen) router.push('/dashboard')
-    else if (auth.isStaff) router.push('/staff/dashboard')
-    else if (auth.isAdmin) router.push('/admin/dashboard')
-    return
-  }
   api.get('/public-stats').then(res => { stats.value = res.data }).catch(() => {})
 })
 </script>

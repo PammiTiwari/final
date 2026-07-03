@@ -6,7 +6,6 @@
       <div class="content-area">
         <div class="page-header">
           <div class="page-header-left">
-            <h1>Admin Dashboard</h1>
             <p>Overview of city complaints and services</p>
           </div>
           <router-link to="/admin/complaints" class="btn btn-primary">View All Complaints</router-link>

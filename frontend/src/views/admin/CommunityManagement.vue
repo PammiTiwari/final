@@ -6,7 +6,6 @@
       <div class="content-area">
         <div class="page-header">
           <div class="page-header-left">
-            <h1>Community Management</h1>
             <p>Monitor and moderate community posts</p>
           </div>
         </div>

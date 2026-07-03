@@ -563,6 +563,7 @@ class AssignmentListResource(Resource):
             assignment.assigned_at = datetime.now(timezone.utc).replace(tzinfo=None)
             assignment.completed_at = None
             sr.status = RequestStatus.REASSIGNED
+            sr.admin_notes = data.get("notes") or f"Reassigned to {staff.name} ({staff.department})"
             sr.updated_at = datetime.now(timezone.utc).replace(tzinfo=None)
 
             if prev_staff_id != staff.id:
@@ -584,6 +585,7 @@ class AssignmentListResource(Resource):
         )
         db.session.add(assignment)
         sr.status = RequestStatus.ASSIGNED
+        sr.admin_notes = data.get("notes") or f"Assigned to {staff.name} ({staff.department})"
         sr.updated_at = datetime.now(timezone.utc).replace(tzinfo=None)
 
         _notify(staff.id, "New Assignment",
@@ -646,15 +648,21 @@ class FacilityListResource(Resource):
         if missing:
             return {"message": f"Missing: {', '.join(missing)}"}, 400
 
+        try:
+            capacity = int(data["capacity"])
+            fee_per_hour = float(data.get("fee_per_hour", 0))
+        except (TypeError, ValueError):
+            return {"message": "Capacity and fee per hour must be numbers"}, 400
+
         facility = Facility(
             name=data["name"].strip(),
             facility_type=data["facility_type"].strip(),
             address=data["address"].strip(),
             ward=data.get("ward", ""),
-            capacity=int(data["capacity"]),
+            capacity=capacity,
             description=data.get("description", ""),
             amenities=data.get("amenities", ""),
-            fee_per_hour=float(data.get("fee_per_hour", 0)),
+            fee_per_hour=fee_per_hour,
             image_urls=data.get("image_urls") or [],
         )
         db.session.add(facility)
@@ -1422,7 +1430,11 @@ class PostListResource(Resource):
         post_id = request.args.get("post_id")
         if not post_id:
             return {"message": "post_id required"}, 400
-        p = db.session.get(Post, int(post_id))
+        try:
+            post_id = int(post_id)
+        except ValueError:
+            return {"message": "post_id must be a number"}, 400
+        p = db.session.get(Post, post_id)
         if not p:
             return {"message": "Not found"}, 404
         db.session.delete(p)
