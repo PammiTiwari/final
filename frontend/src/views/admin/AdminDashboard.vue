@@ -40,6 +40,11 @@
               <div class="stat-num">{{ stats.requests?.resolved || 0 }}</div>
               <div class="stat-label">Resolved</div>
             </div>
+            <div class="stat-card">
+              <div class="stat-icon icon-gold">&#9733;</div>
+              <div class="stat-num">{{ satisfaction ? `${satisfaction.avg}/5` : '—' }}</div>
+              <div class="stat-label">Citizen Satisfaction{{ satisfaction ? ` (${satisfaction.count})` : '' }}</div>
+            </div>
           </div>
 
           <!-- Status donut chart -->
@@ -176,6 +181,15 @@ const loading = ref(true)
 const stats = ref({})
 const unread = ref(0)
 const deptCount = ref(0)
+const allRequests = ref([])
+
+// Average of all citizen ratings (given when closing a resolved complaint).
+const satisfaction = computed(() => {
+  const rated = allRequests.value.filter(r => r.rating)
+  if (!rated.length) return null
+  const avg = rated.reduce((s, r) => s + r.rating, 0) / rated.length
+  return { avg: avg.toFixed(1), count: rated.length }
+})
 
 const reportsLoading = ref(false)
 const reportData = ref(null)
@@ -253,14 +267,16 @@ onMounted(async () => {
   fromDate.value = from.toISOString().split('T')[0]
 
   try {
-    const [dash, depts, notifs] = await Promise.all([
+    const [dash, depts, notifs, reqs] = await Promise.all([
       api.get('/dashboard'),
       api.get('/departments'),
       api.get('/notifications'),
+      api.get('/requests'),
     ])
     stats.value = dash.data
     deptCount.value = depts.data.length
     unread.value = notifs.data.unread_count || 0
+    allRequests.value = reqs.data
   } catch (e) {
     console.error(e)
   } finally {

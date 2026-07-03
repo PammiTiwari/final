@@ -63,23 +63,23 @@ def _seed_data():
 
     # Officers (staff) — one per department
     o1 = User(name="Rajesh Kumar", email="rajesh@civic.gov", role=Role.STAFF,
-              phone="9876543210", ward="Ward-1", department="Road Maintenance")
+              phone="9876543210", department="Road Maintenance")
     o1.set_password("Staff@123")
 
     o2 = User(name="Priya Singh", email="priya@civic.gov", role=Role.STAFF,
-              phone="9876543212", ward="Ward-2", department="Electricity Department")
+              phone="9876543212", department="Electricity Department")
     o2.set_password("Staff@123")
 
     o3 = User(name="Imran Khan", email="imran@civic.gov", role=Role.STAFF,
-              phone="9876543213", ward="Ward-3", department="Water Supply Department")
+              phone="9876543213", department="Water Supply Department")
     o3.set_password("Staff@123")
 
     o4 = User(name="Sandeep Yadav", email="sandeep@civic.gov", role=Role.STAFF,
-              phone="9876543214", ward="Ward-4", department="Sanitation Department")
+              phone="9876543214", department="Sanitation Department")
     o4.set_password("Staff@123")
 
     o5 = User(name="Kavita Sharma", email="kavita@civic.gov", role=Role.STAFF,
-              phone="9876543215", ward="Ward-5", department="Parks & Public Spaces")
+              phone="9876543215", department="Parks & Public Spaces")
     o5.set_password("Staff@123")
 
     # Citizens — all residents of Preetam Nagar; street names below are
@@ -174,8 +174,9 @@ def _seed_data():
         dict(citizen_id=c3.id, category="electricity", title="Power outage affecting entire block",
              description="Our entire residential block has had no electricity for 2 days. The transformer may have blown. Please send a technician.",
              address="Civil Lines Road, Preetam Nagar (Ward-3)", ward="Ward-3", priority=Priority.URGENT,
-             status=RequestStatus.RESOLVED, created_at=dt(15), resolved_at=dt(13), staff=o2, notes="Transformer replaced. Power restored.",
-             evidence_urls=["/api/uploads/dark-street.jpg"]),
+             status=RequestStatus.CLOSED, created_at=dt(15), resolved_at=dt(13), staff=o2, notes="Transformer replaced. Power restored.",
+             evidence_urls=["/api/uploads/dark-street.jpg"],
+             rating=4, feedback="Power was restored quickly once the team arrived. Good work."),
         dict(citizen_id=c3.id, category="waste", title="Garbage not collected for a week",
              description="Garbage has not been collected from our area for over a week. The garbage is piling up and causing health hazards. Rats and flies are increasing.",
              address="Civil Lines Road, Preetam Nagar (Ward-3)", ward="Ward-3", priority=Priority.HIGH,

@@ -18,27 +18,27 @@ export const USERS = {
   },
   "rajesh@civic.gov": {
     id: 2, name: "Rajesh Kumar", email: "rajesh@civic.gov",
-    role: "staff", phone: "9876543210", ward: "Ward-1", department: "Road Maintenance",
+    role: "staff", phone: "9876543210", department: "Road Maintenance",
     address: null, is_active: true,
   },
   "priya@civic.gov": {
     id: 3, name: "Priya Singh", email: "priya@civic.gov",
-    role: "staff", phone: "9876543212", ward: "Ward-2", department: "Electricity Department",
+    role: "staff", phone: "9876543212", department: "Electricity Department",
     address: null, is_active: true,
   },
   "imran@civic.gov": {
     id: 4, name: "Imran Khan", email: "imran@civic.gov",
-    role: "staff", phone: "9876543213", ward: "Ward-3", department: "Water Supply Department",
+    role: "staff", phone: "9876543213", department: "Water Supply Department",
     address: null, is_active: true,
   },
   "sandeep@civic.gov": {
     id: 5, name: "Sandeep Yadav", email: "sandeep@civic.gov",
-    role: "staff", phone: "9876543214", ward: "Ward-4", department: "Sanitation Department",
+    role: "staff", phone: "9876543214", department: "Sanitation Department",
     address: null, is_active: true,
   },
   "kavita@civic.gov": {
     id: 6, name: "Kavita Sharma", email: "kavita@civic.gov",
-    role: "staff", phone: "9876543215", ward: "Ward-5", department: "Parks & Public Spaces",
+    role: "staff", phone: "9876543215", department: "Parks & Public Spaces",
     address: null, is_active: true,
   },
   "amit@gmail.com": {
@@ -79,11 +79,11 @@ export const DEPARTMENTS = [
 
 // ── Officers ───────────────────────────────────────────────────────────────────
 export const OFFICERS = [
-  { id: 2,  officer_id: "OFF02", name: "Rajesh Kumar",  email: "rajesh@civic.gov",  department: "Road Maintenance",        phone: "9876543210", ward: "Ward-1", is_active: true, assigned_count: 2 },
-  { id: 3,  officer_id: "OFF03", name: "Priya Singh",   email: "priya@civic.gov",   department: "Electricity Department",  phone: "9876543212", ward: "Ward-2", is_active: true, assigned_count: 2 },
-  { id: 4,  officer_id: "OFF04", name: "Imran Khan",    email: "imran@civic.gov",   department: "Water Supply Department", phone: "9876543213", ward: "Ward-3", is_active: true, assigned_count: 2 },
-  { id: 5,  officer_id: "OFF05", name: "Sandeep Yadav", email: "sandeep@civic.gov", department: "Sanitation Department",   phone: "9876543214", ward: "Ward-4", is_active: true, assigned_count: 1 },
-  { id: 6,  officer_id: "OFF06", name: "Kavita Sharma", email: "kavita@civic.gov",  department: "Parks & Public Spaces",   phone: "9876543215", ward: "Ward-5", is_active: true, assigned_count: 1 },
+  { id: 2,  officer_id: "OFF02", name: "Rajesh Kumar",  email: "rajesh@civic.gov",  department: "Road Maintenance",        phone: "9876543210", is_active: true, assigned_count: 2 },
+  { id: 3,  officer_id: "OFF03", name: "Priya Singh",   email: "priya@civic.gov",   department: "Electricity Department",  phone: "9876543212", is_active: true, assigned_count: 2 },
+  { id: 4,  officer_id: "OFF04", name: "Imran Khan",    email: "imran@civic.gov",   department: "Water Supply Department", phone: "9876543213", is_active: true, assigned_count: 2 },
+  { id: 5,  officer_id: "OFF05", name: "Sandeep Yadav", email: "sandeep@civic.gov", department: "Sanitation Department",   phone: "9876543214", is_active: true, assigned_count: 1 },
+  { id: 6,  officer_id: "OFF06", name: "Kavita Sharma", email: "kavita@civic.gov",  department: "Parks & Public Spaces",   phone: "9876543215", is_active: true, assigned_count: 1 },
 ]
 
 // ── Service Requests (8 — a small, deliberately curated set) ──────────────────
@@ -144,9 +144,10 @@ export const REQUESTS = [
     title: "Power outage affecting entire block",
     description: "Our entire residential block has had no electricity for 2 days. The transformer may have blown. Please send a technician.",
     address: "Civil Lines Road, Preetam Nagar (Ward-3)", ward: "Ward-3",
-    priority: "urgent", status: "resolved",
+    priority: "urgent", status: "closed",
     admin_notes: "Transformer replaced. Power restored.",
     image_urls: [], evidence_urls: ["/uploads/dark-street.jpg"],
+    rating: 4, feedback: "Power was restored quickly once the team arrived. Good work.",
     pending_funds: false, hold_reason: null, reopen_count: 0,
     upvotes_count: 0, upvoted_by_me: false,
     assignment: { id: 4, request_id: 4, staff_id: 3, staff_name: "Priya Singh", staff_department: "Electricity Department", assigned_by: 1, notes: "Transformer replaced. Power restored.", assigned_at: daysAgo(15, 12), completed_at: daysAgo(13) },

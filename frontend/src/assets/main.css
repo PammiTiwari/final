@@ -227,6 +227,7 @@ select.form-control {
 .icon-green { background: rgba(21,128,61,0.14); color: var(--success); }
 .icon-gray { background: var(--stone); color: var(--text-muted); }
 .icon-purple { background: rgba(155,89,182,0.14); color: #9B59B6; }
+.icon-gold { background: rgba(255,193,7,0.16); color: #C79100; }
 
 /* ── Table ── */
 .table-wrapper { overflow-x: auto; }

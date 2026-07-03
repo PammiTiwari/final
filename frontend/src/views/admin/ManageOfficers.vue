@@ -24,7 +24,7 @@
                   <th>Name</th>
                   <th>Department</th>
                   <th>Contact</th>
-                  <th>Ward</th>
+                  <th>Rating</th>
                   <th>Status</th>
                   <th>Action</th>
                 </tr>
@@ -43,7 +43,12 @@
                   </td>
                   <td class="text-sm">{{ o.department || '—' }}</td>
                   <td class="td-phone">{{ o.phone || '—' }}</td>
-                  <td class="text-xs">{{ o.ward || '—' }}</td>
+                  <td>
+                    <span v-if="officerRatings[o.id]" class="rating-cell" :title="`${officerRatings[o.id].count} rating(s) from citizens`">
+                      <span class="rating-star">&#9733;</span> {{ officerRatings[o.id].avg }}
+                    </span>
+                    <span v-else class="text-xs text-muted">—</span>
+                  </td>
                   <td>
                     <span :class="o.is_active ? 'badge-active' : 'badge-inactive'">
                       {{ o.is_active ? 'Active' : 'Inactive' }}
@@ -81,18 +86,9 @@
             <input v-model="form.email" type="email" class="form-control" placeholder="Email address" :disabled="!!editingOfficer" />
           </div>
         </div>
-        <div class="form-grid-2">
-          <div class="form-group">
-            <label>Phone</label>
-            <input v-model="form.phone" class="form-control" placeholder="Phone number" />
-          </div>
-          <div class="form-group">
-            <label>Ward</label>
-            <select v-model="form.ward" class="form-control">
-              <option value="">Select Ward</option>
-              <option v-for="w in wards" :key="w" :value="w">{{ w }}</option>
-            </select>
-          </div>
+        <div class="form-group">
+          <label>Phone</label>
+          <input v-model="form.phone" class="form-control" placeholder="Phone number" />
         </div>
         <div class="form-group">
           <label>Department</label>
@@ -134,20 +130,41 @@ const showModal = ref(false)
 const editingOfficer = ref(null)
 const saving = ref(false)
 const modalError = ref('')
-const wards = ['Ward-1', 'Ward-2', 'Ward-3', 'Ward-4', 'Ward-5', 'Central']
 
-const form = ref({ name: '', email: '', phone: '', ward: '', department: '', password: '' })
+const form = ref({ name: '', email: '', phone: '', department: '', password: '' })
+
+const requests = ref([])
 
 onMounted(async () => {
   try {
-    const [offRes, deptRes] = await Promise.all([api.get('/officers'), api.get('/departments')])
+    const [offRes, deptRes, reqRes] = await Promise.all([api.get('/officers'), api.get('/departments'), api.get('/requests')])
     officers.value = offRes.data
     departments.value = deptRes.data
+    requests.value = reqRes.data
   } catch (e) {
     console.error(e)
   } finally {
     loading.value = false
   }
+})
+
+// Average citizen rating per officer, from the complaints they handled that
+// were closed with a rating. Computed client-side from data already fetched —
+// works identically in mock mode and against the real backend.
+const officerRatings = computed(() => {
+  const acc = {}
+  for (const r of requests.value) {
+    const staffId = r.assignment?.staff_id
+    if (!staffId || !r.rating) continue
+    if (!acc[staffId]) acc[staffId] = { sum: 0, count: 0 }
+    acc[staffId].sum += r.rating
+    acc[staffId].count += 1
+  }
+  const out = {}
+  for (const [id, { sum, count }] of Object.entries(acc)) {
+    out[id] = { avg: (sum / count).toFixed(1), count }
+  }
+  return out
 })
 
 const filteredOfficers = computed(() => {
@@ -162,14 +179,14 @@ const filteredOfficers = computed(() => {
 
 function openAdd() {
   editingOfficer.value = null
-  form.value = { name: '', email: '', phone: '', ward: '', department: '', password: '' }
+  form.value = { name: '', email: '', phone: '', department: '', password: '' }
   modalError.value = ''
   showModal.value = true
 }
 
 function openEdit(officer) {
   editingOfficer.value = officer
-  form.value = { name: officer.name, email: officer.email, phone: officer.phone || '', ward: officer.ward || '', department: officer.department || '', password: '' }
+  form.value = { name: officer.name, email: officer.email, phone: officer.phone || '', department: officer.department || '', password: '' }
   modalError.value = ''
   showModal.value = true
 }
@@ -183,7 +200,6 @@ async function saveOfficer() {
       const res = await api.put(`/officers/${editingOfficer.value.id}`, {
         name: form.value.name,
         phone: form.value.phone,
-        ward: form.value.ward,
         department: form.value.department,
       })
       const idx = officers.value.findIndex(o => o.id === editingOfficer.value.id)
@@ -218,6 +234,8 @@ async function deactivate(officer) {
 
 <style scoped>
 .off-id { font-family: monospace; font-size: 0.8rem; background: #FFE9F2; padding: 0.1rem 0.4rem; border-radius: 4px; }
+.rating-cell { font-size: 0.85rem; font-weight: 700; color: var(--text); white-space: nowrap; }
+.rating-star { color: #FFC107; }
 .officer-name-cell { display: flex; align-items: center; gap: 0.5rem; }
 .action-btns { display: flex; gap: 0.35rem; }
 .badge-active { font-size: 0.72rem; font-weight: 700; color: #0E7A4F; background: #D7F5E5; padding: 0.15rem 0.5rem; border-radius: 100px; }

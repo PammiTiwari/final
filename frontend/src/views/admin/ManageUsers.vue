@@ -27,7 +27,7 @@
               <thead>
                 <tr>
                   <th>ID</th><th>Name</th><th>Email</th><th>Role</th>
-                  <th>Ward</th><th>Phone</th><th>Status</th><th>Joined</th><th>Actions</th>
+                  <th>Ward / Department</th><th>Phone</th><th>Status</th><th>Joined</th><th>Actions</th>
                 </tr>
               </thead>
               <tbody>
@@ -43,7 +43,8 @@
                   <td>
                     <span :class="`role-badge role-${u.role}`">{{ u.role }}</span>
                   </td>
-                  <td class="text-sm">{{ u.ward || '—' }}</td>
+                  <!-- Citizens belong to a ward; officers/admin work department-wide across all wards -->
+                  <td class="text-sm">{{ u.role === 'citizen' ? (u.ward || '—') : (u.department || '—') }}</td>
                   <td class="text-sm">{{ u.phone || '—' }}</td>
                   <td>
                     <span :class="u.is_active ? 'badge-active' : 'badge-inactive'">
@@ -88,7 +89,8 @@
               To make someone an officer, use Manage Officers instead (it requires picking a department).
             </p>
           </div>
-          <div class="form-group">
+          <!-- Ward is a citizen-only attribute; officers cover their department across all wards -->
+          <div class="form-group" v-if="editModal.role === 'citizen'">
             <label>Ward</label>
             <select v-model="editModal.ward" class="form-control">
               <option value="">Select Ward</option>
@@ -152,9 +154,9 @@ async function confirmEdit() {
   editModal.value.loading = true
   editModal.value.error = ""
   try {
-    const { data } = await api.put(`/admin/users/${editModal.value.user.id}`, {
-      role: editModal.value.role, ward: editModal.value.ward,
-    })
+    const payload = { role: editModal.value.role }
+    if (editModal.value.role === 'citizen') payload.ward = editModal.value.ward
+    const { data } = await api.put(`/admin/users/${editModal.value.user.id}`, payload)
     const u = users.value.find(x => x.id === editModal.value.user.id)
     if (u) { u.role = data.role; u.ward = data.ward }
     editModal.value.show = false
