@@ -124,7 +124,7 @@ const showNotif = ref(false)
 const unread = ref(0)
 const roleFilter = ref("")
 const search = ref("")
-const wards = ["Ward-1","Ward-2","Ward-3","Ward-4","Ward-5","Central"]
+const wards = ["Ward-1","Ward-2","Ward-3","Central"]
 
 const filtered = computed(() => {
   return users.value.filter(u => {

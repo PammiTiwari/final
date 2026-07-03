@@ -58,56 +58,54 @@ def _seed_data():
 
     # ── Users ─────────────────────────────────────────────────────────────────
     admin = User(name="Preetam Nagar Admin", email="admin@civic.gov", role=Role.ADMIN,
-                 phone="9000000001", ward="Central", department="Administration")
+                 phone="9000000001", ward="Central", department="Administration", created_at=dt(60))
     admin.set_password("Admin@123")
 
     # Officers (staff) — one per department
     o1 = User(name="Rajesh Kumar", email="rajesh@civic.gov", role=Role.STAFF,
-              phone="9876543210", department="Road Maintenance")
+              phone="9876543210", department="Road Maintenance", created_at=dt(60))
     o1.set_password("Staff@123")
 
     o2 = User(name="Priya Singh", email="priya@civic.gov", role=Role.STAFF,
-              phone="9876543212", department="Electricity Department")
+              phone="9876543212", department="Electricity Department", created_at=dt(60))
     o2.set_password("Staff@123")
 
     o3 = User(name="Imran Khan", email="imran@civic.gov", role=Role.STAFF,
-              phone="9876543213", department="Water Supply Department")
+              phone="9876543213", department="Water Supply Department", created_at=dt(60))
     o3.set_password("Staff@123")
 
     o4 = User(name="Sandeep Yadav", email="sandeep@civic.gov", role=Role.STAFF,
-              phone="9876543214", department="Sanitation Department")
+              phone="9876543214", department="Sanitation Department", created_at=dt(60))
     o4.set_password("Staff@123")
 
     o5 = User(name="Kavita Sharma", email="kavita@civic.gov", role=Role.STAFF,
-              phone="9876543215", department="Parks & Public Spaces")
+              phone="9876543215", department="Parks & Public Spaces", created_at=dt(60))
     o5.set_password("Staff@123")
 
     # Citizens — all residents of Preetam Nagar; street names below are
     # internal to this one colony and consistently mapped to its wards:
     #   Ward-1: MG Road, Block A, School Road, Stadium Road
-    #   Ward-2: Park Street, Colony Gate, Main Boulevard
-    #   Ward-3: Civil Lines Road, Nehru Chowk, Library Road
-    #   Ward-4: Green Avenue, Temple Road, Main Market, Community Park Road
-    #   Ward-5: Nehru Colony, Railway Road, Main Road
+    #   Ward-2: Park Street, Colony Gate, Main Boulevard, Green Avenue
+    #   Ward-3: Civil Lines Road, Nehru Chowk, Library Road, Nehru Colony
     #   Central: Civic Center, Central Park
     c1 = User(name="Amit Sharma", email="amit@gmail.com", role=Role.CITIZEN,
-              phone="9111111101", address="12, MG Road, Preetam Nagar (Ward-1)", ward="Ward-1")
+              phone="9111111101", address="12, MG Road, Preetam Nagar (Ward-1)", ward="Ward-1", created_at=dt(45))
     c1.set_password("Citizen@123")
 
     c2 = User(name="Neha Verma", email="neha@gmail.com", role=Role.CITIZEN,
-              phone="9111111102", address="45, Park Street, Preetam Nagar (Ward-2)", ward="Ward-2")
+              phone="9111111102", address="45, Park Street, Preetam Nagar (Ward-2)", ward="Ward-2", created_at=dt(40))
     c2.set_password("Citizen@123")
 
     c3 = User(name="Ravi Gupta", email="ravi.g@gmail.com", role=Role.CITIZEN,
-              phone="9111111103", address="78, Civil Lines Road, Preetam Nagar (Ward-3)", ward="Ward-3")
+              phone="9111111103", address="78, Civil Lines Road, Preetam Nagar (Ward-3)", ward="Ward-3", created_at=dt(35))
     c3.set_password("Citizen@123")
 
     c4 = User(name="Sunita Mehta", email="sunita@gmail.com", role=Role.CITIZEN,
-              phone="9111111104", address="23, Green Avenue, Preetam Nagar (Ward-4)", ward="Ward-4")
+              phone="9111111104", address="23, Green Avenue, Preetam Nagar (Ward-2)", ward="Ward-2", created_at=dt(30))
     c4.set_password("Citizen@123")
 
     c5 = User(name="Arjun Singh", email="arjun@gmail.com", role=Role.CITIZEN,
-              phone="9111111105", address="56, Nehru Colony, Preetam Nagar (Ward-5)", ward="Ward-5")
+              phone="9111111105", address="56, Nehru Colony, Preetam Nagar (Ward-3)", ward="Ward-3", created_at=dt(25))
     c5.set_password("Citizen@123")
 
     db.session.add_all([admin, o1, o2, o3, o4, o5, c1, c2, c3, c4, c5])
@@ -196,7 +194,7 @@ def _seed_data():
              rating=5, feedback="Great work — the new playset is wonderful, kids love it!"),
         dict(citizen_id=c5.id, category="sanitation", title="Blocked sewage drain overflowing in Nehru Colony",
              description="The open sewage drain in Nehru Colony is completely blocked with rags and plastic waste. Dirty water is stagnating and overflowing near homes, and the foul smell is unbearable. Needs urgent cleaning.",
-             address="Nehru Colony, Preetam Nagar (Ward-5)", ward="Ward-5", priority=Priority.HIGH,
+             address="Nehru Colony, Preetam Nagar (Ward-3)", ward="Ward-3", priority=Priority.HIGH,
              status=RequestStatus.ASSIGNED, created_at=dt(2), staff=o4, notes="Sanitation crew scheduled to clear the blocked drain this week.",
              image_urls=["/api/uploads/sewage-drain.jpg"]),
     ]

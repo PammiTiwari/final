@@ -1498,6 +1498,20 @@ class PostCommentListResource(Resource):
         return comment.to_dict(), 201
 
 
+class PostCommentResource(Resource):
+    @jwt_required()
+    def delete(self, post_id, comment_id):
+        user = _current_user()
+        c = PostComment.query.filter_by(id=comment_id, post_id=post_id).first()
+        if not c:
+            return {"message": "Not found"}, 404
+        if not (user.role == Role.ADMIN or c.user_id == user.id):
+            return {"message": "You can only delete your own comments"}, 403
+        db.session.delete(c)
+        db.session.commit()
+        return {"success": True}, 200
+
+
 # ── Image Upload ──────────────────────────────────────────────────────────────
 
 class UploadResource(Resource):
@@ -1754,6 +1768,7 @@ def register_resources(api):
     api.add_resource(PostResourceItem, "/posts/<int:post_id>")
     api.add_resource(PostLikeResource, "/posts/<int:post_id>/like")
     api.add_resource(PostCommentListResource, "/posts/<int:post_id>/comments")
+    api.add_resource(PostCommentResource, "/posts/<int:post_id>/comments/<int:comment_id>")
 
     # File Upload
     api.add_resource(UploadResource, "/upload")

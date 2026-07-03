@@ -124,7 +124,7 @@ const facilities = ref([])
 const showNotif = ref(false)
 const unread = ref(0)
 const facilityTypes = ["Community Hall","Sports Ground","Conference Room","Park","Auditorium","Library Hall","Swimming Pool","Other"]
-const wards = ["Ward-1","Ward-2","Ward-3","Ward-4","Ward-5","Central"]
+const wards = ["Ward-1","Ward-2","Ward-3","Central"]
 
 const modal = ref({ show: false, isEdit: false, facilityId: null, loading: false, error: "" })
 const form = ref({ name: "", facility_type: "", address: "", ward: "", capacity: 50, fee_per_hour: 0, description: "", amenities: "", image_urls: [] })

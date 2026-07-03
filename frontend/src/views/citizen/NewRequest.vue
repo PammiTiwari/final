@@ -155,7 +155,7 @@ const scanLoading = ref(false)
 const scanMessage = ref('')
 const scanError = ref(false)
 
-const wards = ['Ward-1', 'Ward-2', 'Ward-3', 'Ward-4', 'Ward-5', 'Central']
+const wards = ['Ward-1', 'Ward-2', 'Ward-3', 'Central']
 
 async function handleScanPaper(e) {
   const file = e.target.files[0]

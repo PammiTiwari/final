@@ -56,6 +56,7 @@
                   <div class="comment-author">
                     {{ c.author_name }}
                     <span v-if="c.is_official" class="official-tag">{{ c.author_department || 'Admin' }}</span>
+                    <button class="comment-delete-btn" title="Delete comment" @click="deleteComment(post, c)">&#x2715;</button>
                   </div>
                   <div class="comment-text">{{ c.content }}</div>
                   <div class="comment-time">{{ timeAgo(c.created_at) }}</div>
@@ -148,6 +149,17 @@ async function addComment(post) {
   }
 }
 
+async function deleteComment(post, comment) {
+  if (!confirm('Delete this comment?')) return
+  try {
+    await api.delete(`/posts/${post.id}/comments/${comment.id}`)
+    commentData.value[post.id] = commentData.value[post.id].filter(c => c.id !== comment.id)
+    post.comments_count--
+  } catch (e) {
+    alert(e.response?.data?.message || 'Failed to delete comment')
+  }
+}
+
 function timeAgo(d) {
   const diff = (Date.now() - new Date(d)) / 1000
   if (diff < 60) return 'just now'
@@ -178,6 +190,8 @@ function timeAgo(d) {
 .official-tag { font-size: 0.65rem; background: #0E7A4F; color: #fff; padding: 0.1rem 0.35rem; border-radius: 100px; }
 .comment-text { font-size: 0.82rem; color: #5C1A41; margin-top: 0.15rem; }
 .comment-time { font-size: 0.7rem; color: #D69AB8; margin-top: 0.1rem; }
+.comment-delete-btn { background: none; border: none; color: #D69AB8; font-size: 0.7rem; cursor: pointer; margin-left: 0.4rem; padding: 0 0.2rem; }
+.comment-delete-btn:hover { color: #E0218A; }
 .comment-input { display: flex; gap: 0.5rem; margin-top: 0.75rem; }
 .badge-count { background: #FF2D6F; color: #fff; border-radius: 50%; padding: 0.05rem 0.3rem; font-size: 0.65rem; margin-left: 0.25rem; }
 .btn-xs { padding: 0.22rem 0.6rem; font-size: 0.72rem; border-radius: 4px; font-weight: 600; border: none; cursor: pointer; }

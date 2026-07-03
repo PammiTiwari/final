@@ -66,8 +66,10 @@ async function handle(method, url, body) {
     return { data: { token, user: found } }
   }
   if (M === "POST" && path === "/auth/register") {
-    const newUser = { id: 99, name: body.name, email: body.email, role: "citizen", ward: body.ward || "Ward 1", phone: body.phone || "", is_active: true }
-    const token = "mock-jwt-citizen-99"
+    const nextId = Math.max(...Object.values(USERS).map(u => u.id)) + 1
+    const newUser = { id: nextId, name: body.name, email: body.email, role: "citizen", ward: body.ward || "Ward-1", phone: body.phone || "", address: body.address || null, is_active: true, created_at: new Date().toISOString() }
+    USERS[body.email] = newUser
+    const token = `mock-jwt-citizen-${nextId}`
     localStorage.setItem("civic_token", token)
     localStorage.setItem("civic_user", JSON.stringify(newUser))
     return { data: { token, user: newUser } }
@@ -375,6 +377,21 @@ async function handle(method, url, body) {
   const postMatch = matchId(path, "/posts")
   if (postMatch) {
     const p = POSTS.find(x => x.id === postMatch.id)
+    // Comment delete must be matched before the post delete below — both are
+    // DELETEs under /posts/:id, only the rest of the path differs.
+    const commentDel = postMatch.rest.match(/^\/comments\/(\d+)$/)
+    if (M === "DELETE" && commentDel) {
+      const cid = parseInt(commentDel[1])
+      const idx = (p?.comments_list || []).findIndex(c => c.id === cid)
+      if (idx === -1) return Promise.reject({ response: { status: 404, data: { message: "Not found" } } })
+      const c = p.comments_list[idx]
+      if (!(user?.role === "admin" || c.user_id === user?.id)) {
+        return Promise.reject({ response: { status: 403, data: { message: "You can only delete your own comments" } } })
+      }
+      p.comments_list.splice(idx, 1)
+      p.comments_count--
+      return { data: { success: true } }
+    }
     if (M === "DELETE")                                       { const i = POSTS.indexOf(p); if (i > -1) POSTS.splice(i, 1); return { data: { success: true } } }
     if (M === "POST" && postMatch.rest.includes("like"))      { if (p) { p.liked_by_me = !p.liked_by_me; p.likes_count += p.liked_by_me ? 1 : -1 } return { data: { liked: p?.liked_by_me, likes_count: p?.likes_count } } }
     // Return a copy, not the live array — the frontend also appends its own new
@@ -382,7 +399,7 @@ async function handle(method, url, body) {
     // make that comment show up twice (server-side push + client-side push).
     if (M === "GET"  && postMatch.rest.includes("comments"))  return { data: [...(p?.comments_list || [])] }
     if (M === "POST" && postMatch.rest.includes("comments")) {
-      const c = { id: Date.now(), author_name: user?.name, author_department: user?.department || null, is_official: user?.role === "staff" || user?.role === "admin", content: body?.content, created_at: new Date().toISOString() }
+      const c = { id: Date.now(), user_id: user?.id, author_name: user?.name, author_department: user?.department || null, is_official: user?.role === "staff" || user?.role === "admin", content: body?.content, created_at: new Date().toISOString() }
       if (p) { p.comments_list.push(c); p.comments_count++ }
       return { data: c }
     }

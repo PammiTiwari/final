@@ -55,6 +55,8 @@
                   <div class="comment-author">
                     {{ c.author_name }}
                     <span v-if="c.is_official" class="official-tag">{{ c.author_department || 'Official' }}</span>
+                    <button v-if="c.user_id === auth.user?.id || auth.isAdmin" class="comment-delete-btn"
+                            title="Delete comment" @click="deleteComment(post, c)">&#x2715;</button>
                   </div>
                   <div class="comment-text">{{ c.content }}</div>
                   <div class="comment-time">{{ timeAgo(c.created_at) }}</div>
@@ -174,6 +176,17 @@ async function deletePost(post) {
   }
 }
 
+async function deleteComment(post, comment) {
+  if (!confirm('Delete this comment?')) return
+  try {
+    await api.delete(`/posts/${post.id}/comments/${comment.id}`)
+    commentData.value[post.id] = commentData.value[post.id].filter(c => c.id !== comment.id)
+    post.comments_count--
+  } catch (e) {
+    alert(e.response?.data?.message || 'Failed to delete comment')
+  }
+}
+
 async function toggleLike(post) {
   try {
     const res = await api.post(`/posts/${post.id}/like`)
@@ -260,6 +273,8 @@ function timeAgo(d) {
 .official-tag { font-size: 0.65rem; background: #5C1A41; color: #fff; padding: 0.1rem 0.35rem; border-radius: 100px; }
 .comment-text { font-size: 0.82rem; color: #5C1A41; margin-top: 0.15rem; }
 .comment-time { font-size: 0.7rem; color: #D69AB8; margin-top: 0.1rem; }
+.comment-delete-btn { background: none; border: none; color: #D69AB8; font-size: 0.7rem; cursor: pointer; margin-left: 0.4rem; padding: 0 0.2rem; }
+.comment-delete-btn:hover { color: #E0218A; }
 .comment-input { display: flex; gap: 0.5rem; margin-top: 0.75rem; }
 
 .badge-inline { margin-left: 0.4rem; font-size: 0.6rem; }
