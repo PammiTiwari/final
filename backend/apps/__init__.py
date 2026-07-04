@@ -54,7 +54,7 @@ def _seed_data():
         return
 
     def dt(days_ago, hour=10, minute=0):
-        return datetime.now(timezone.utc).replace(tzinfo=None) - timedelta(days=days_ago) + timedelta(hours=hour-10, minutes=minute)
+        return datetime.now(timezone(timedelta(hours=5, minutes=30))).replace(tzinfo=None) - timedelta(days=days_ago) + timedelta(hours=hour-10, minutes=minute)
 
     # ── Users ─────────────────────────────────────────────────────────────────
     admin = User(name="Preetam Nagar Admin", email="admin@civic.gov", role=Role.ADMIN,

@@ -140,7 +140,7 @@ async function deleteAnnouncement(post) {
 }
 
 function fmtDate(d) {
-  return new Date(d).toLocaleDateString('en-IN', { day: '2-digit', month: 'long', year: 'numeric' })
+  return new Date(d).toLocaleDateString('en-IN', { timeZone: 'Asia/Kolkata', day: '2-digit', month: 'long', year: 'numeric' })
 }
 </script>
 

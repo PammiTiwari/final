@@ -126,7 +126,7 @@ const chartPoints = computed(() => {
   if (!data.value?.complaints_over_time) return []
   const days = data.value.complaints_over_time
   const maxVal = Math.max(...days.map(d => d.count), 1)
-  const stepX = (svgW - padL - padR) / (days.length - 1)
+  const stepX = (svgW - padL - padR) / Math.max(days.length - 1, 1)
   const scaleY = (svgH - padT - padB) / maxVal
   return days.map((d, i) => ({
     x: padL + i * stepX,

@@ -1,5 +1,5 @@
 import json
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 from werkzeug.security import generate_password_hash, check_password_hash
 from . import db
 
@@ -75,8 +75,13 @@ DEPT_MAP = {
     "other": "General Affairs",
 }
 
-def now_utc():
-    return datetime.now(timezone.utc).replace(tzinfo=None)
+IST = timezone(timedelta(hours=5, minutes=30))
+
+def now_ist():
+    """Naive IST wall-clock — the app serves one Indian locality, and the
+    host/WSL clock runs UTC, so timestamps are stored as IST directly and
+    serialized with an explicit +05:30 offset in to_dict()."""
+    return datetime.now(IST).replace(tzinfo=None)
 
 
 class Department(db.Model):
@@ -85,7 +90,7 @@ class Department(db.Model):
     name = db.Column(db.String(200), nullable=False, unique=True)
     description = db.Column(db.Text)
     officer_incharge_id = db.Column(db.Integer, db.ForeignKey("users.id"), nullable=True)
-    created_at = db.Column(db.DateTime, default=now_utc)
+    created_at = db.Column(db.DateTime, default=now_ist)
     officer = db.relationship("User", foreign_keys=[officer_incharge_id])
 
     def to_dict(self):
@@ -97,7 +102,7 @@ class Department(db.Model):
             "officer_incharge_id": self.officer_incharge_id,
             "officer_name": self.officer.name if self.officer else None,
             "officer_phone": self.officer.phone if self.officer else None,
-            "created_at": self.created_at.isoformat(),
+            "created_at": self.created_at.isoformat() + "+05:30",
         }
 
 
@@ -113,7 +118,7 @@ class User(db.Model):
     ward = db.Column(db.String(50))
     department = db.Column(db.String(100))  # for staff: their department name
     is_active = db.Column(db.Boolean, default=True, nullable=False)
-    created_at = db.Column(db.DateTime, default=now_utc, nullable=False)
+    created_at = db.Column(db.DateTime, default=now_ist, nullable=False)
 
     service_requests = db.relationship("ServiceRequest", foreign_keys="ServiceRequest.citizen_id", backref="citizen", lazy="dynamic")
     assignments = db.relationship("Assignment", foreign_keys="Assignment.staff_id", backref="staff", lazy="dynamic")
@@ -138,7 +143,7 @@ class User(db.Model):
             "ward": self.ward,
             "department": self.department,
             "is_active": self.is_active,
-            "created_at": self.created_at.isoformat(),
+            "created_at": self.created_at.isoformat() + "+05:30",
         }
 
 
@@ -164,8 +169,8 @@ class ServiceRequest(db.Model):
     pending_funds = db.Column(db.Boolean, nullable=False, default=False)  # admin-tagged: needs budget allocation before work can proceed
     hold_reason = db.Column(db.Text)      # why a request is on_hold_weather (or other admin hold), shown to the citizen
     department_override = db.Column(db.String(100))  # set when admin assigns to an officer outside the category's default department (e.g. citizen miscategorized it)
-    created_at = db.Column(db.DateTime, default=now_utc, nullable=False)
-    updated_at = db.Column(db.DateTime, default=now_utc, onupdate=now_utc, nullable=False)
+    created_at = db.Column(db.DateTime, default=now_ist, nullable=False)
+    updated_at = db.Column(db.DateTime, default=now_ist, onupdate=now_ist, nullable=False)
     resolved_at = db.Column(db.DateTime)
     assignment = db.relationship("Assignment", backref="request", uselist=False, cascade="all, delete-orphan")
     upvotes = db.relationship("ComplaintUpvote", backref="request", lazy="dynamic", cascade="all, delete-orphan")
@@ -217,9 +222,9 @@ class ServiceRequest(db.Model):
             "hold_reason": self.hold_reason,
             "upvotes_count": self.upvotes.count(),
             "assignment": self.assignment.to_dict() if self.assignment else None,
-            "created_at": self.created_at.isoformat(),
-            "updated_at": self.updated_at.isoformat(),
-            "resolved_at": self.resolved_at.isoformat() if self.resolved_at else None,
+            "created_at": self.created_at.isoformat() + "+05:30",
+            "updated_at": self.updated_at.isoformat() + "+05:30",
+            "resolved_at": self.resolved_at.isoformat() + "+05:30" if self.resolved_at else None,
         }
 
     def to_public_dict(self):
@@ -243,9 +248,9 @@ class ServiceRequest(db.Model):
             "image_urls": self.image_urls,
             "assignment": self.assignment.to_dict() if self.assignment else None,
             "upvotes_count": self.upvotes.count(),
-            "created_at": self.created_at.isoformat(),
-            "updated_at": self.updated_at.isoformat(),
-            "resolved_at": self.resolved_at.isoformat() if self.resolved_at else None,
+            "created_at": self.created_at.isoformat() + "+05:30",
+            "updated_at": self.updated_at.isoformat() + "+05:30",
+            "resolved_at": self.resolved_at.isoformat() + "+05:30" if self.resolved_at else None,
         }
 
 
@@ -256,7 +261,7 @@ class Assignment(db.Model):
     staff_id = db.Column(db.Integer, db.ForeignKey("users.id"), nullable=False)
     assigned_by = db.Column(db.Integer, db.ForeignKey("users.id"), nullable=False)
     notes = db.Column(db.Text)
-    assigned_at = db.Column(db.DateTime, default=now_utc, nullable=False)
+    assigned_at = db.Column(db.DateTime, default=now_ist, nullable=False)
     completed_at = db.Column(db.DateTime)
     assigner = db.relationship("User", foreign_keys=[assigned_by])
 
@@ -269,8 +274,8 @@ class Assignment(db.Model):
             "staff_department": self.staff.department if self.staff else None,
             "assigned_by": self.assigned_by,
             "notes": self.notes,
-            "assigned_at": self.assigned_at.isoformat(),
-            "completed_at": self.completed_at.isoformat() if self.completed_at else None,
+            "assigned_at": self.assigned_at.isoformat() + "+05:30",
+            "completed_at": self.completed_at.isoformat() + "+05:30" if self.completed_at else None,
         }
 
 
@@ -287,7 +292,7 @@ class Facility(db.Model):
     fee_per_hour = db.Column(db.Float, nullable=False, default=0.0)
     _image_urls = db.Column("image_urls", db.Text)
     is_active = db.Column(db.Boolean, default=True, nullable=False)
-    created_at = db.Column(db.DateTime, default=now_utc, nullable=False)
+    created_at = db.Column(db.DateTime, default=now_ist, nullable=False)
     bookings = db.relationship("Booking", backref="facility", lazy="dynamic", cascade="all, delete-orphan")
 
     @property
@@ -304,7 +309,7 @@ class Facility(db.Model):
             "address": self.address, "ward": self.ward, "capacity": self.capacity,
             "description": self.description, "amenities": self.amenities,
             "fee_per_hour": self.fee_per_hour, "image_urls": self.image_urls, "is_active": self.is_active,
-            "created_at": self.created_at.isoformat(),
+            "created_at": self.created_at.isoformat() + "+05:30",
         }
 
 
@@ -321,7 +326,7 @@ class Booking(db.Model):
     status = db.Column(db.String(20), nullable=False, default=BookingStatus.PENDING)
     fee = db.Column(db.Float, nullable=False, default=0.0)
     admin_notes = db.Column(db.String(500))
-    created_at = db.Column(db.DateTime, default=now_utc, nullable=False)
+    created_at = db.Column(db.DateTime, default=now_ist, nullable=False)
     payment = db.relationship("Payment", backref="booking", uselist=False, cascade="all, delete-orphan")
 
     def to_dict(self):
@@ -338,7 +343,7 @@ class Booking(db.Model):
             "purpose": self.purpose, "attendees": self.attendees,
             "status": self.status, "fee": self.fee, "admin_notes": self.admin_notes,
             "payment": self.payment.to_dict() if self.payment else None,
-            "created_at": self.created_at.isoformat(),
+            "created_at": self.created_at.isoformat() + "+05:30",
         }
 
 
@@ -351,7 +356,7 @@ class Payment(db.Model):
     status = db.Column(db.String(20), nullable=False, default=PaymentStatus.PENDING)
     method = db.Column(db.String(50), default="online")
     transaction_ref = db.Column(db.String(100), unique=True)
-    created_at = db.Column(db.DateTime, default=now_utc, nullable=False)
+    created_at = db.Column(db.DateTime, default=now_ist, nullable=False)
     paid_at = db.Column(db.DateTime)
     payer = db.relationship("User", foreign_keys=[citizen_id])
 
@@ -362,8 +367,8 @@ class Payment(db.Model):
             "citizen_name": self.payer.name if self.payer else None,
             "amount": self.amount, "status": self.status, "method": self.method,
             "transaction_ref": self.transaction_ref,
-            "created_at": self.created_at.isoformat(),
-            "paid_at": self.paid_at.isoformat() if self.paid_at else None,
+            "created_at": self.created_at.isoformat() + "+05:30",
+            "paid_at": self.paid_at.isoformat() + "+05:30" if self.paid_at else None,
         }
 
 
@@ -375,13 +380,13 @@ class Notification(db.Model):
     message = db.Column(db.Text, nullable=False)
     notif_type = db.Column(db.String(50), default="info")
     is_read = db.Column(db.Boolean, default=False, nullable=False)
-    created_at = db.Column(db.DateTime, default=now_utc, nullable=False)
+    created_at = db.Column(db.DateTime, default=now_ist, nullable=False)
 
     def to_dict(self):
         return {
             "id": self.id, "user_id": self.user_id, "title": self.title,
             "message": self.message, "notif_type": self.notif_type,
-            "is_read": self.is_read, "created_at": self.created_at.isoformat(),
+            "is_read": self.is_read, "created_at": self.created_at.isoformat() + "+05:30",
         }
 
 
@@ -396,7 +401,7 @@ class Post(db.Model):
     ward = db.Column(db.String(50))
     _image_urls = db.Column("image_urls", db.Text)
     is_official = db.Column(db.Boolean, default=False)
-    created_at = db.Column(db.DateTime, default=now_utc)
+    created_at = db.Column(db.DateTime, default=now_ist)
     author = db.relationship("User", foreign_keys=[citizen_id])
     comments = db.relationship("PostComment", backref="post", lazy="dynamic", cascade="all, delete-orphan")
     likes = db.relationship("PostLike", backref="post", lazy="dynamic", cascade="all, delete-orphan")
@@ -422,7 +427,7 @@ class Post(db.Model):
             "likes_count": self.likes.count(),
             "comments_count": self.comments.count(),
             "liked_by_me": self.likes.filter_by(user_id=current_user_id).count() > 0 if current_user_id else False,
-            "created_at": self.created_at.isoformat(),
+            "created_at": self.created_at.isoformat() + "+05:30",
         }
 
 
@@ -433,7 +438,7 @@ class PostComment(db.Model):
     user_id = db.Column(db.Integer, db.ForeignKey("users.id"), nullable=False)
     content = db.Column(db.Text, nullable=False)
     is_official = db.Column(db.Boolean, default=False)
-    created_at = db.Column(db.DateTime, default=now_utc)
+    created_at = db.Column(db.DateTime, default=now_ist)
     author = db.relationship("User", foreign_keys=[user_id])
 
     def to_dict(self):
@@ -443,7 +448,7 @@ class PostComment(db.Model):
             "author_role": self.author.role if self.author else None,
             "author_department": self.author.department if self.author else None,
             "content": self.content, "is_official": self.is_official,
-            "created_at": self.created_at.isoformat(),
+            "created_at": self.created_at.isoformat() + "+05:30",
         }
 
 

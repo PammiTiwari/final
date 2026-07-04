@@ -4,7 +4,12 @@
     <div class="main-content">
       <AppTopbar :title="`Complaint ${complaint?.cmp_id || ''}`" />
       <div class="content-area">
-        <router-link to="/complaints" class="back-link">&larr; Back to Complaints</router-link>
+        <div class="detail-topbar">
+          <router-link to="/complaints" class="back-link">&larr; Back to Complaints</router-link>
+          <button v-if="complaint?.status === 'pending'" class="btn btn-sm btn-danger" :disabled="deleting" @click="deleteComplaint">
+            {{ deleting ? 'Deleting...' : '🗑 Delete Complaint' }}
+          </button>
+        </div>
 
         <div v-if="loading" class="spinner"></div>
         <div v-else-if="!complaint" class="empty-state">
@@ -133,7 +138,7 @@
 
 <script setup>
 import { ref, onMounted } from 'vue'
-import { useRoute } from 'vue-router'
+import { useRoute, useRouter } from 'vue-router'
 import AppSidebar from '../../components/AppSidebar.vue'
 import AppTopbar from '../../components/AppTopbar.vue'
 import ResolveActions from '../../components/ResolveActions.vue'
@@ -142,8 +147,10 @@ import api from '../../api'
 import { fmtStatus } from '../../utils/status'
 
 const route = useRoute()
+const router = useRouter()
 const loading = ref(true)
 const complaint = ref(null)
+const deleting = ref(false)
 
 onMounted(async () => {
   try {
@@ -160,13 +167,27 @@ function onUpdated(data) {
   complaint.value = data
 }
 
+async function deleteComplaint() {
+  if (deleting.value) return
+  if (!confirm(`Delete complaint ${complaint.value.cmp_id}? This cannot be undone.`)) return
+  deleting.value = true
+  try {
+    await api.delete(`/requests/${complaint.value.id}`)
+    router.push('/complaints')
+  } catch (e) {
+    alert(e.response?.data?.message || 'Failed to delete complaint')
+    deleting.value = false
+  }
+}
+
 function fmtDateFull(d) {
   if (!d) return ''
-  return new Date(d).toLocaleString('en-IN', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' })
+  return new Date(d).toLocaleString('en-IN', { timeZone: 'Asia/Kolkata', day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' })
 }
 </script>
 
 <style scoped>
+.detail-topbar { display: flex; justify-content: space-between; align-items: center; }
 .back-link { font-size: 0.85rem; font-weight: 600; color: #9B2C6F; display: inline-flex; align-items: center; gap: 0.3rem; }
 .back-link:hover { color: #5C1A41; }
 .detail-header { display: flex; justify-content: space-between; align-items: flex-start; padding-bottom: 1rem; margin-bottom: 1rem; border-bottom: 1px solid #FFD1E6; }

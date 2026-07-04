@@ -263,7 +263,7 @@ async function confirmPayment() {
 }
 
 function fmtDate(d) {
-  return new Date(d).toLocaleDateString("en-IN", { weekday: "short", day: "2-digit", month: "short", year: "numeric" })
+  return new Date(d).toLocaleDateString("en-IN", { timeZone: "Asia/Kolkata", weekday: "short", day: "2-digit", month: "short", year: "numeric" })
 }
 </script>
 

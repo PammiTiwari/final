@@ -158,7 +158,7 @@ async function updateStatus(b, status) {
 }
 
 function fmtDate(d) {
-  return new Date(d + "T00:00:00").toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" })
+  return new Date(d + "T00:00:00").toLocaleDateString("en-IN", { timeZone: "Asia/Kolkata", day: "2-digit", month: "short", year: "numeric" })
 }
 </script>
 

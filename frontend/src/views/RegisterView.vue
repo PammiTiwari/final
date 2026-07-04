@@ -65,6 +65,12 @@ const success = ref('')
 
 async function handleRegister() {
   error.value = ''
+  const name = form.value.name.trim()
+  // A real name: letters (with spaces/dots/hyphens), never digits or symbols
+  if (!/^[A-Za-z][A-Za-z\s.'-]{1,79}$/.test(name)) {
+    error.value = 'Please enter a valid name — letters only, numbers are not a name'
+    return
+  }
   if (form.value.password.length < 6) {
     error.value = 'Password must be at least 6 characters'
     return
@@ -72,8 +78,8 @@ async function handleRegister() {
   loading.value = true
   try {
     await auth.register({
-      name: form.value.name,
-      email: form.value.email,
+      name,
+      email: form.value.email.trim(),
       password: form.value.password,
     })
     router.push('/dashboard')

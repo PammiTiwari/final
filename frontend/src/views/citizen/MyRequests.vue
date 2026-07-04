@@ -59,7 +59,12 @@
                   <td>{{ fmtDate(r.created_at) }}</td>
                   <td><span :class="['badge', `badge-${r.status}`]">{{ fmtStatus(r.status) }}</span></td>
                   <td>
-                    <router-link :to="`/complaints/${r.id}`" class="btn btn-xs btn-primary">View</router-link>
+                    <div class="action-btns">
+                      <router-link :to="`/complaints/${r.id}`" class="btn btn-xs btn-primary">View</router-link>
+                      <button v-if="r.status === 'pending'" class="btn btn-xs btn-danger" :disabled="deletingId === r.id" @click="deleteRequest(r)">
+                        {{ deletingId === r.id ? 'Deleting...' : 'Delete' }}
+                      </button>
+                    </div>
                   </td>
                 </tr>
               </tbody>
@@ -94,6 +99,7 @@ const search = ref('')
 const statusFilter = ref('')
 const page = ref(1)
 const perPage = 10
+const deletingId = ref(null)
 
 onMounted(async () => {
   try {
@@ -129,8 +135,22 @@ const paged = computed(() => {
   return filtered.value.slice(start, start + perPage)
 })
 
+async function deleteRequest(r) {
+  if (deletingId.value) return
+  if (!confirm(`Delete complaint ${r.cmp_id}? This cannot be undone.`)) return
+  deletingId.value = r.id
+  try {
+    await api.delete(`/requests/${r.id}`)
+    requests.value = requests.value.filter(x => x.id !== r.id)
+  } catch (e) {
+    alert(e.response?.data?.message || 'Failed to delete complaint')
+  } finally {
+    deletingId.value = null
+  }
+}
+
 function fmtDate(d) {
-  return new Date(d).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })
+  return new Date(d).toLocaleDateString('en-IN', { timeZone: 'Asia/Kolkata', day: '2-digit', month: 'short', year: 'numeric' })
 }
 </script>
 
@@ -141,4 +161,5 @@ function fmtDate(d) {
 .title-with-thumb { display: flex; align-items: center; gap: 0.6rem; }
 .title-with-thumb span { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 160px; }
 .thumb { width: 40px; height: 40px; border-radius: 6px; object-fit: cover; flex-shrink: 0; border: 1px solid #FFD1E6; }
+.action-btns { display: flex; gap: 0.35rem; }
 </style>

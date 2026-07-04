@@ -37,7 +37,7 @@ const emit = defineEmits(['proceed', 'upvoted'])
 // local copy so we can track per-item upvote/busy state
 const items = ref([])
 watch(() => props.matches, (m) => {
-  items.value = m.map(x => ({ ...x, upvoted: false, busy: false }))
+  items.value = m.map(x => ({ ...x, upvoted: !!x.upvoted_by_me, busy: false }))
 }, { immediate: true })
 
 async function toggle(m) {

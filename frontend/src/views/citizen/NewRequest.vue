@@ -209,7 +209,7 @@ async function suggestCategory() {
 async function handleSubmit() {
   if (loading.value) return
   error.value = ''
-  if (!form.value.category || !form.value.address || !form.value.description) {
+  if (!form.value.category || !form.value.title.trim() || !form.value.address.trim() || !form.value.description.trim()) {
     error.value = 'Please fill all required fields'
     return
   }

@@ -10,11 +10,35 @@ from flask_jwt_extended import (
 from werkzeug.utils import secure_filename
 from rapidfuzz import fuzz
 from . import db
-from .models import (
+from .models import (now_ist, 
     User, ServiceRequest, Assignment, Facility, Booking, Payment, Notification,
     Post, PostComment, PostLike, ComplaintUpvote, Department,
     Role, RequestStatus, Priority, BookingStatus, PaymentStatus, DEPT_MAP
 )
+
+import re
+
+# ── Input validators (shared) ─────────────────────────────────────────────────
+NAME_RE = re.compile(r"^[A-Za-z][A-Za-z\s.'-]{1,79}$")   # letters/spaces only, no digits
+EMAIL_RE = re.compile(r"^[^@\s]+@[^@\s]+\.[A-Za-z]{2,}$")
+PHONE_RE = re.compile(r"^[6-9]\d{9}$")                    # 10-digit Indian mobile
+
+def _validate_person(data, require_password=True):
+    """Common checks for any human account (register / officer create).
+    Returns an error tuple or None."""
+    name = (data.get("name") or "").strip()
+    if not NAME_RE.match(name):
+        return {"message": "Please enter a valid name — letters only, numbers are not a name"}, 400
+    email = (data.get("email") or "").lower().strip()
+    if not EMAIL_RE.match(email):
+        return {"message": "Please enter a valid email address"}, 400
+    if require_password and len(data.get("password") or "") < 6:
+        return {"message": "Password must be at least 6 characters"}, 400
+    phone = (data.get("phone") or "").strip()
+    if phone and not PHONE_RE.match(phone):
+        return {"message": "Phone must be a valid 10-digit mobile number"}, 400
+    return None
+
 
 SIMILAR_THRESHOLD = 70  # rapidfuzz token_set_ratio cutoff for "looks like a duplicate"
 PROXIMITY_M = 300       # complaints within this distance (metres) count as nearby duplicates
@@ -113,9 +137,13 @@ class RegisterResource(Resource):
     def post(self):
         data = request.get_json() or {}
         required = ["name", "email", "password"]
-        missing = [f for f in required if not data.get(f)]
+        missing = [f for f in required if not str(data.get(f) or "").strip()]
         if missing:
             return {"message": f"Missing fields: {', '.join(missing)}"}, 400
+
+        invalid = _validate_person(data)
+        if invalid:
+            return invalid
 
         if User.query.filter_by(email=data["email"].lower().strip()).first():
             return {"message": "Email already registered"}, 409
@@ -167,9 +195,13 @@ class MeResource(Resource):
     def put(self):
         user = _current_user()
         data = request.get_json() or {}
+        if "name" in data and not NAME_RE.match((data["name"] or "").strip()):
+            return {"message": "Please enter a valid name — letters only, numbers are not a name"}, 400
+        if data.get("phone") and not PHONE_RE.match(data["phone"].strip()):
+            return {"message": "Phone must be a valid 10-digit mobile number"}, 400
         for field in ["name", "phone", "address", "ward"]:
             if field in data:
-                setattr(user, field, data[field])
+                setattr(user, field, data[field].strip() if isinstance(data[field], str) else data[field])
         db.session.commit()
         return user.to_dict(), 200
 
@@ -218,7 +250,7 @@ class RequestListResource(Resource):
 
         data = request.get_json() or {}
         required = ["category", "description", "address"]
-        missing = [f for f in required if not data.get(f)]
+        missing = [f for f in required if not str(data.get(f) or "").strip()]
         if missing:
             return {"message": f"Missing: {', '.join(missing)}"}, 400
 
@@ -290,14 +322,19 @@ class RequestResource(Resource):
             return {"message": "Forbidden"}, 403
 
         data = request.get_json() or {}
+        if "priority" in data and data["priority"] not in Priority.ALL:
+            return {"message": "Invalid priority"}, 400
+        for field in ["title", "description", "address"]:
+            if field in data and not str(data[field] or "").strip():
+                return {"message": f"{field.title()} cannot be blank"}, 400
         editable = ["title", "description", "address", "ward", "priority", "admin_notes"]
         for field in editable:
             if field in data:
                 if user.role == Role.CITIZEN and field == "admin_notes":
                     continue
-                setattr(sr, field, data[field])
+                setattr(sr, field, data[field].strip() if isinstance(data[field], str) else data[field])
 
-        sr.updated_at = datetime.now(timezone.utc).replace(tzinfo=None)
+        sr.updated_at = now_ist()
         db.session.commit()
         return sr.to_dict(), 200
 
@@ -336,6 +373,14 @@ class RequestStatusResource(Resource):
         if new_status == RequestStatus.ON_HOLD_WEATHER and user.role != Role.ADMIN:
             return {"message": "Only an admin can place a request on hold"}, 403
 
+        if new_status == RequestStatus.REJECTED:
+            if user.role != Role.ADMIN:
+                return {"message": "Only an admin can reject a request"}, 403
+            if sr.status != RequestStatus.PENDING:
+                return {"message": "Only a pending (unassigned) request can be rejected"}, 400
+            if not (data.get("admin_notes") or "").strip():
+                return {"message": "A reason is required to reject a request"}, 400
+
         if user.role == Role.CITIZEN:
             if sr.citizen_id != user.id:
                 return {"message": "Forbidden"}, 403
@@ -356,6 +401,8 @@ class RequestStatusResource(Resource):
                 return {"message": "This request is on hold for weather restrictions — an admin needs to resume it first"}, 400
             if sr.status == RequestStatus.RESOLVED:
                 return {"message": "This request is already resolved — no further updates until the citizen reopens or closes it"}, 400
+            if sr.status == RequestStatus.REJECTED:
+                return {"message": "This request was rejected and can no longer be updated"}, 400
             allowed = [RequestStatus.IN_PROGRESS, RequestStatus.RESOLVED]
             if new_status not in allowed:
                 return {"message": "Staff can only mark in_progress or resolved"}, 400
@@ -380,16 +427,16 @@ class RequestStatusResource(Resource):
                 sr.feedback = data["feedback"].strip()
 
         if new_status in [RequestStatus.RESOLVED, RequestStatus.CLOSED]:
-            sr.resolved_at = datetime.now(timezone.utc).replace(tzinfo=None)
+            sr.resolved_at = now_ist()
             if sr.assignment:
-                sr.assignment.completed_at = datetime.now(timezone.utc).replace(tzinfo=None)
+                sr.assignment.completed_at = now_ist()
 
         if new_status == RequestStatus.REOPENED:
             sr.reopen_count += 1
             if sr.assignment:
                 sr.assignment.completed_at = None
 
-        sr.updated_at = datetime.now(timezone.utc).replace(tzinfo=None)
+        sr.updated_at = now_ist()
 
         if new_status == RequestStatus.REJECTED:
             reason = data.get("admin_notes", "").strip()
@@ -435,7 +482,7 @@ class RequestBudgetTagResource(Resource):
         if "pending_funds" not in data:
             return {"message": "Missing: pending_funds"}, 400
         sr.pending_funds = bool(data["pending_funds"])
-        sr.updated_at = datetime.now(timezone.utc).replace(tzinfo=None)
+        sr.updated_at = now_ist()
         db.session.commit()
         return sr.to_dict(), 200
 
@@ -449,6 +496,7 @@ class RequestSimilarResource(Resource):
     so the citizen is looking at other citizens' complaints; no PII exposure."""
     @jwt_required()
     def post(self):
+        user = _current_user()
         data = request.get_json() or {}
         category = data.get("category")
         description = (data.get("description") or "").strip()
@@ -461,7 +509,13 @@ class RequestSimilarResource(Resource):
         except (TypeError, ValueError):
             lat = lng = None
         matches = _find_similar(category, ward, description, lat, lng)
-        return [m.to_public_dict() for m in matches], 200
+        upvoted_ids = {u.request_id for u in ComplaintUpvote.query.filter_by(user_id=user.id)}
+        result = []
+        for m in matches:
+            d = m.to_public_dict()
+            d["upvoted_by_me"] = m.id in upvoted_ids
+            result.append(d)
+        return result, 200
 
 
 class RequestUpvoteResource(Resource):
@@ -560,11 +614,11 @@ class AssignmentListResource(Resource):
             assignment.staff_id = staff.id
             assignment.assigned_by = admin.id
             assignment.notes = data.get("notes", "")
-            assignment.assigned_at = datetime.now(timezone.utc).replace(tzinfo=None)
+            assignment.assigned_at = now_ist()
             assignment.completed_at = None
             sr.status = RequestStatus.REASSIGNED
             sr.admin_notes = data.get("notes") or f"Reassigned to {staff.name} ({staff.department})"
-            sr.updated_at = datetime.now(timezone.utc).replace(tzinfo=None)
+            sr.updated_at = now_ist()
 
             if prev_staff_id != staff.id:
                 _notify(prev_staff_id, "Request Reassigned",
@@ -586,7 +640,7 @@ class AssignmentListResource(Resource):
         db.session.add(assignment)
         sr.status = RequestStatus.ASSIGNED
         sr.admin_notes = data.get("notes") or f"Assigned to {staff.name} ({staff.department})"
-        sr.updated_at = datetime.now(timezone.utc).replace(tzinfo=None)
+        sr.updated_at = now_ist()
 
         _notify(staff.id, "New Assignment",
                 f"You've been assigned request: '{sr.title}' (Priority: {sr.priority})", "assignment")
@@ -653,6 +707,12 @@ class FacilityListResource(Resource):
             fee_per_hour = float(data.get("fee_per_hour", 0))
         except (TypeError, ValueError):
             return {"message": "Capacity and fee per hour must be numbers"}, 400
+        if capacity < 1 or capacity > 100000:
+            return {"message": "Capacity must be between 1 and 100000"}, 400
+        if fee_per_hour < 0:
+            return {"message": "Fee per hour cannot be negative"}, 400
+        if not data["name"].strip() or not data["address"].strip():
+            return {"message": "Name and address cannot be blank"}, 400
 
         facility = Facility(
             name=data["name"].strip(),
@@ -688,6 +748,23 @@ class FacilityResource(Resource):
         if not f:
             return {"message": "Not found"}, 404
         data = request.get_json() or {}
+        if "capacity" in data:
+            try:
+                data["capacity"] = int(data["capacity"])
+            except (TypeError, ValueError):
+                return {"message": "Capacity must be a number"}, 400
+            if data["capacity"] < 1 or data["capacity"] > 100000:
+                return {"message": "Capacity must be between 1 and 100000"}, 400
+        if "fee_per_hour" in data:
+            try:
+                data["fee_per_hour"] = float(data["fee_per_hour"])
+            except (TypeError, ValueError):
+                return {"message": "Fee per hour must be a number"}, 400
+            if data["fee_per_hour"] < 0:
+                return {"message": "Fee per hour cannot be negative"}, 400
+        for field in ["name", "facility_type", "address"]:
+            if field in data and not str(data[field] or "").strip():
+                return {"message": f"{field.replace('_', ' ').title()} cannot be blank"}, 400
         for field in ["name", "facility_type", "address", "ward", "capacity",
                       "description", "amenities", "fee_per_hour", "image_urls", "is_active"]:
             if field in data:
@@ -793,7 +870,7 @@ class BookingListResource(Resource):
         if booking_date < date.today():
             return {"message": "Cannot book for a past date"}, 400
 
-        if booking_date == date.today() and start_time <= datetime.now().time():
+        if booking_date == now_ist().date() and start_time <= now_ist().time():
             return {"message": "Cannot book a time slot that has already passed today"}, 400
 
         if start_time >= end_time:
@@ -904,6 +981,8 @@ class BookingStatusResource(Resource):
         valid_statuses = [BookingStatus.PENDING, BookingStatus.CONFIRMED, BookingStatus.CANCELLED, BookingStatus.COMPLETED]
         if new_status not in valid_statuses:
             return {"message": "Invalid status"}, 400
+        if b.status in [BookingStatus.CANCELLED, BookingStatus.COMPLETED]:
+            return {"message": f"A {b.status} booking can no longer be changed"}, 400
 
         user = _current_user()
         if user.role == Role.STAFF and new_status not in [BookingStatus.COMPLETED]:
@@ -970,7 +1049,7 @@ class PaymentPayResource(Resource):
         payment.status = PaymentStatus.PAID
         payment.method = method
         payment.transaction_ref = f"TXN-{uuid.uuid4().hex[:10].upper()}"
-        payment.paid_at = datetime.now(timezone.utc).replace(tzinfo=None)
+        payment.paid_at = now_ist()
 
         booking = payment.booking
         if booking and booking.status == BookingStatus.PENDING:
@@ -1190,7 +1269,16 @@ class DepartmentResource(Resource):
             return {"message": "Not found"}, 404
         data = request.get_json() or {}
         if "name" in data:
-            dept.name = data["name"]
+            new_name = (data["name"] or "").strip()
+            if not new_name:
+                return {"message": "Name cannot be blank"}, 400
+            clash = Department.query.filter(
+                db.func.lower(Department.name) == new_name.lower(),
+                Department.id != dept.id,
+            ).first()
+            if clash:
+                return {"message": "A department with this name already exists"}, 409
+            dept.name = new_name
         if "description" in data:
             dept.description = data["description"]
         if "officer_incharge_id" in data:
@@ -1230,6 +1318,9 @@ class OfficerListResource(Resource):
         data = request.get_json() or {}
         if not data.get("email") or not data.get("name") or not data.get("password"):
             return {"message": "Name, email and password required"}, 400
+        invalid = _validate_person(data)
+        if invalid:
+            return invalid
         if User.query.filter_by(email=data["email"]).first():
             return {"message": "Email already in use"}, 409
         u = User(
@@ -1253,9 +1344,13 @@ class OfficerResource(Resource):
         if not u or u.role != Role.STAFF:
             return {"message": "Not found"}, 404
         data = request.get_json() or {}
-        for field in ["name", "phone", "ward", "department"]:
+        if "name" in data and not NAME_RE.match((data["name"] or "").strip()):
+            return {"message": "Please enter a valid name — letters only, numbers are not a name"}, 400
+        if data.get("phone") and not PHONE_RE.match(data["phone"].strip()):
+            return {"message": "Phone must be a valid 10-digit mobile number"}, 400
+        for field in ["name", "phone", "department"]:
             if field in data:
-                setattr(u, field, data[field])
+                setattr(u, field, (data[field] or "").strip() if isinstance(data[field], str) else data[field])
         if data.get("is_active") is not None:
             u.is_active = data["is_active"]
         db.session.commit()
@@ -1294,6 +1389,8 @@ class PublicTrackResource(Resource):
             req_id = int(cmp_id.replace("CMP", "").lstrip("0") or "0")
         except ValueError:
             return {"message": "Invalid ID format"}, 400
+        if req_id <= 0 or req_id > 2**31:
+            return {"message": "Complaint not found"}, 404
         r = db.session.get(ServiceRequest, req_id)
         if not r:
             return {"message": "Complaint not found"}, 404
@@ -1325,7 +1422,7 @@ class ReportsResource(Resource):
             return err
         from datetime import timedelta
 
-        today = datetime.utcnow().date()
+        today = now_ist().date()
         from_str = request.args.get("from")
         to_str = request.args.get("to")
         try:
@@ -1401,7 +1498,8 @@ class PostListResource(Resource):
     def post(self):
         user = _current_user()
         data = request.get_json() or {}
-        if not data.get("content"):
+        content = (data.get("content") or "").strip()
+        if not content:
             return {"message": "Content required"}, 400
         # Only an admin can publish an official announcement — everyone else's
         # posts land in the regular community feed, announcement or not.
@@ -1410,8 +1508,8 @@ class PostListResource(Resource):
             category = "general"
         post = Post(
             citizen_id=user.id,
-            title=data.get("title", ""),
-            content=data["content"],
+            title=(data.get("title") or "").strip(),
+            content=content,
             category=category,
             location=data.get("location", ""),
             ward=data.get("ward", user.ward or ""),
@@ -1485,12 +1583,13 @@ class PostCommentListResource(Resource):
         if not db.session.get(Post, post_id):
             return {"message": "Post not found"}, 404
         data = request.get_json() or {}
-        if not data.get("content"):
+        content = (data.get("content") or "").strip()
+        if not content:
             return {"message": "Content required"}, 400
         comment = PostComment(
             post_id=post_id,
             user_id=user.id,
-            content=data["content"],
+            content=content,
             is_official=user.role in ["staff", "admin"],
         )
         db.session.add(comment)
@@ -1697,7 +1796,7 @@ class BookingInvoiceResource(Resource):
             "gst_18_percent": tax,
             "total": total,
             "payment_status": booking.payment.status if booking.payment else "free",
-            "issued_at": datetime.now().strftime("%d %b %Y, %I:%M %p"),
+            "issued_at": now_ist().strftime("%d %b %Y, %I:%M %p"),
         }
 
 

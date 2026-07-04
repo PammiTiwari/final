@@ -192,21 +192,26 @@ function openEdit(officer) {
 }
 
 async function saveOfficer() {
-  if (!form.value.name.trim()) { modalError.value = 'Name is required'; return }
+  const name = form.value.name.trim()
+  if (!/^[A-Za-z][A-Za-z\s.'-]{1,79}$/.test(name)) { modalError.value = 'Please enter a valid name — letters only, numbers are not a name'; return }
+  const phone = form.value.phone.trim()
+  if (phone && !/^[6-9]\d{9}$/.test(phone)) { modalError.value = 'Phone must be a valid 10-digit mobile number'; return }
   saving.value = true
   modalError.value = ''
   try {
     if (editingOfficer.value) {
       const res = await api.put(`/officers/${editingOfficer.value.id}`, {
-        name: form.value.name,
-        phone: form.value.phone,
+        name,
+        phone,
         department: form.value.department,
       })
       const idx = officers.value.findIndex(o => o.id === editingOfficer.value.id)
       if (idx >= 0) officers.value[idx] = res.data
     } else {
-      if (!form.value.email || !form.value.password) { modalError.value = 'Email and password required'; saving.value = false; return }
-      const res = await api.post('/officers', form.value)
+      if (!form.value.email.trim() || !form.value.password) { modalError.value = 'Email and password required'; saving.value = false; return }
+      if (!/^[^@\s]+@[^@\s]+\.[A-Za-z]{2,}$/.test(form.value.email.trim())) { modalError.value = 'Please enter a valid email address'; saving.value = false; return }
+      if (form.value.password.length < 6) { modalError.value = 'Password must be at least 6 characters'; saving.value = false; return }
+      const res = await api.post('/officers', { ...form.value, name, phone, email: form.value.email.trim() })
       officers.value.push(res.data)
     }
     showModal.value = false

@@ -66,9 +66,24 @@ async function handle(method, url, body) {
     return { data: { token, user: found } }
   }
   if (M === "POST" && path === "/auth/register") {
+    // Same validation rules as the real backend (see api.py _validate_person)
+    const name = (body?.name || "").trim()
+    if (!/^[A-Za-z][A-Za-z\s.'-]{1,79}$/.test(name)) {
+      throw { response: { status: 400, data: { message: "Please enter a valid name — letters only, numbers are not a name" } } }
+    }
+    const email = (body?.email || "").toLowerCase().trim()
+    if (!/^[^@\s]+@[^@\s]+\.[A-Za-z]{2,}$/.test(email)) {
+      throw { response: { status: 400, data: { message: "Please enter a valid email address" } } }
+    }
+    if ((body?.password || "").length < 6) {
+      throw { response: { status: 400, data: { message: "Password must be at least 6 characters" } } }
+    }
+    if (USERS[email]) {
+      throw { response: { status: 409, data: { message: "Email already registered" } } }
+    }
     const nextId = Math.max(...Object.values(USERS).map(u => u.id)) + 1
-    const newUser = { id: nextId, name: body.name, email: body.email, role: "citizen", ward: body.ward || "Ward-1", phone: body.phone || "", address: body.address || null, is_active: true, created_at: new Date().toISOString() }
-    USERS[body.email] = newUser
+    const newUser = { id: nextId, name, email, role: "citizen", ward: body.ward || "Ward-1", phone: body.phone || "", address: body.address || null, is_active: true, created_at: new Date().toISOString() }
+    USERS[email] = newUser
     const token = `mock-jwt-citizen-${nextId}`
     localStorage.setItem("civic_token", token)
     localStorage.setItem("civic_user", JSON.stringify(newUser))
@@ -145,7 +160,7 @@ async function handle(method, url, body) {
   }
   if (M === "POST" && path === "/requests") {
     const nextId = REQUESTS.reduce((max, r) => Math.max(max, r.id), 0) + 1
-    const newReq = { id: nextId, cmp_id: `CMP${String(nextId).padStart(4, "0")}`, citizen_id: user?.id, citizen_name: user?.name, status: "pending", priority: "medium", upvotes: 0, needs_funds: false, hold_reason: null, image_urls: [], evidence_urls: [], assignment: null, created_at: new Date().toISOString(), updated_at: new Date().toISOString(), ...body, department: DEPT_MAP[body?.category] || "General Affairs" }
+    const newReq = { id: nextId, cmp_id: `CMP${String(nextId).padStart(4, "0")}`, citizen_id: user?.id, citizen_name: user?.name, status: "pending", priority: "medium", upvotes_count: 0, upvoted_by_me: false, pending_funds: false, reopen_count: 0, hold_reason: null, image_urls: [], evidence_urls: [], assignment: null, created_at: new Date().toISOString(), updated_at: new Date().toISOString(), ...body, department: DEPT_MAP[body?.category] || "General Affairs" }
     REQUESTS.push(newReq)
     return { data: newReq }
   }
@@ -160,9 +175,35 @@ async function handle(method, url, body) {
   if (reqMatch) {
     const req = REQUESTS.find(r => r.id === reqMatch.id)
     if (M === "GET") return { data: req || null }
+    if (M === "DELETE" && !reqMatch.rest) {
+      if (!req) return Promise.reject({ response: { status: 404, data: { message: "Not found" } } })
+      if (user?.role === "staff") {
+        return Promise.reject({ response: { status: 403, data: { message: "Forbidden" } } })
+      }
+      if (user?.role === "citizen" && (req.citizen_id !== user.id || req.status !== "pending")) {
+        return Promise.reject({ response: { status: 403, data: { message: "Cannot delete this request" } } })
+      }
+      if (user?.role === "admin" && ["resolved", "closed"].includes(req.status)) {
+        return Promise.reject({ response: { status: 400, data: { message: "Cannot delete a resolved/closed request — it's part of the public accountability record" } } })
+      }
+      const idx = REQUESTS.indexOf(req)
+      if (idx > -1) REQUESTS.splice(idx, 1)
+      return { data: { message: "Request deleted" } }
+    }
     if (M === "PUT" && reqMatch.rest === "/status") {
       if (req) {
         const newStatus = body?.status || req.status
+        if (newStatus === "rejected") {
+          if (user?.role !== "admin") {
+            return Promise.reject({ response: { status: 403, data: { message: "Only an admin can reject a request" } } })
+          }
+          if (req.status !== "pending") {
+            return Promise.reject({ response: { status: 400, data: { message: "Only a pending (unassigned) request can be rejected" } } })
+          }
+          if (!(body?.admin_notes || "").trim()) {
+            return Promise.reject({ response: { status: 400, data: { message: "A reason is required to reject a request" } } })
+          }
+        }
         if (user?.role === "staff") {
           if (!req.assignment || req.assignment.staff_id !== user.id) {
             return Promise.reject({ response: { status: 403, data: { message: "Not your assignment" } } })
@@ -176,12 +217,24 @@ async function handle(method, url, body) {
           if (req.status === "resolved") {
             return Promise.reject({ response: { status: 400, data: { message: "This request is already resolved — no further updates until the citizen reopens or closes it" } } })
           }
+          if (req.status === "rejected") {
+            return Promise.reject({ response: { status: 400, data: { message: "This request was rejected and can no longer be updated" } } })
+          }
           if (!["in_progress", "resolved"].includes(newStatus)) {
             return Promise.reject({ response: { status: 400, data: { message: "Staff can only mark in_progress or resolved" } } })
           }
         } else if (user?.role === "citizen") {
           if (newStatus === "closed" && req.status !== "resolved") {
             return Promise.reject({ response: { status: 400, data: { message: "Only a resolved complaint can be closed" } } })
+          }
+          if (newStatus === "reopened") {
+            if (req.status !== "resolved") {
+              return Promise.reject({ response: { status: 400, data: { message: "Only a resolved complaint can be reopened" } } })
+            }
+            if (req.reopen_count >= 2) {
+              return Promise.reject({ response: { status: 400, data: { message: "This complaint has already been reopened twice — please contact the department directly" } } })
+            }
+            req.reopen_count = (req.reopen_count || 0) + 1
           }
         }
         Object.assign(req, { status: newStatus, hold_reason: body?.hold_reason || req.hold_reason, updated_at: new Date().toISOString() })
@@ -199,7 +252,7 @@ async function handle(method, url, body) {
       return { data: req }
     }
     if (M === "PUT"  && reqMatch.rest === "/reopen") { if (req) { req.status = "reopened"; req.updated_at = new Date().toISOString() } return { data: req } }
-    if (M === "POST" && reqMatch.rest === "/upvote") { if (req) { req.upvoted_by_me = !req.upvoted_by_me; req.upvotes_count += req.upvoted_by_me ? 1 : -1; req.upvotes = req.upvotes_count } return { data: { upvoted: req?.upvoted_by_me, upvotes_count: req?.upvotes_count } } }
+    if (M === "POST" && reqMatch.rest === "/upvote") { if (req) { req.upvoted_by_me = !req.upvoted_by_me; req.upvotes_count = Math.max(0, (req.upvotes_count || 0) + (req.upvoted_by_me ? 1 : -1)) } return { data: { upvoted: req?.upvoted_by_me, upvotes_count: req?.upvotes_count } } }
   }
 
   // Public track & stats
@@ -223,9 +276,12 @@ async function handle(method, url, body) {
   if (M === "POST" && path === "/assignments") {
     const req     = REQUESTS.find(r => r.id === body?.request_id)
     const officer = OFFICERS.find(o => o.id === (body?.staff_id || body?.officer_id))
-    if (!req || !officer) {
-      return Promise.reject({ response: { status: 400, data: { message: "Invalid request or officer" } } })
+    if (!req) return Promise.reject({ response: { status: 404, data: { message: "Request not found" } } })
+    if (["resolved", "closed", "rejected"].includes(req.status)) {
+      return Promise.reject({ response: { status: 400, data: { message: "Cannot assign a completed/closed request" } } })
     }
+    if (!officer) return Promise.reject({ response: { status: 400, data: { message: "Invalid staff member" } } })
+    if (!officer.is_active) return Promise.reject({ response: { status: 400, data: { message: "Cannot assign to a deactivated officer" } } })
     const wasReassign = !!req.assignment
     const assignment = {
       id: req.assignment?.id || REQUESTS.reduce((max, r) => Math.max(max, r.assignment?.id || 0), 0) + 1,
@@ -264,7 +320,18 @@ async function handle(method, url, body) {
   const deptMatch = matchId(path, "/departments")
   if (deptMatch) {
     const d = DEPARTMENTS.find(x => x.id === deptMatch.id)
-    if (M === "PUT")    { Object.assign(d, body); return { data: d } }
+    if (M === "PUT")    {
+      if (!d) return Promise.reject({ response: { status: 404, data: { message: "Not found" } } })
+      const newName = (body?.name || "").trim()
+      if ("name" in (body || {})) {
+        if (!newName) return Promise.reject({ response: { status: 400, data: { message: "Name cannot be blank" } } })
+        if (DEPARTMENTS.some(x => x.id !== d.id && x.name.toLowerCase() === newName.toLowerCase())) {
+          return Promise.reject({ response: { status: 409, data: { message: "A department with this name already exists" } } })
+        }
+      }
+      Object.assign(d, body, "name" in (body || {}) ? { name: newName } : {})
+      return { data: d }
+    }
     if (M === "DELETE") { const i = DEPARTMENTS.indexOf(d); if (i > -1) DEPARTMENTS.splice(i, 1); return { data: { success: true } } }
   }
 
@@ -285,14 +352,28 @@ async function handle(method, url, body) {
 
   // Facilities
   if (M === "GET"  && path === "/facilities") return { data: FACILITIES }
-  if (M === "POST" && path === "/facilities") { const f = { id: FACILITIES.length + 1, image_urls: [], is_active: true, ...body }; FACILITIES.push(f); return { data: f } }
+  if (M === "POST" && path === "/facilities") {
+    const cap = parseInt(body?.capacity), fee = parseFloat(body?.fee_per_hour ?? 0)
+    if (!(body?.name || "").trim() || !(body?.address || "").trim()) throw { response: { status: 400, data: { message: "Name and address cannot be blank" } } }
+    if (isNaN(cap) || cap < 1 || cap > 100000) throw { response: { status: 400, data: { message: "Capacity must be between 1 and 100000" } } }
+    if (isNaN(fee) || fee < 0) throw { response: { status: 400, data: { message: "Fee per hour cannot be negative" } } }
+    const f = { id: FACILITIES.length + 1, image_urls: [], is_active: true, ...body, capacity: cap, fee_per_hour: fee }
+    FACILITIES.push(f)
+    return { data: f }
+  }
   const facMatch = matchId(path, "/facilities")
   if (facMatch) {
     const f = FACILITIES.find(x => x.id === facMatch.id)
     if (M === "GET"  && !facMatch.rest)                      return { data: f }
     if (M === "PUT")                                          { Object.assign(f, body); return { data: f } }
     if (M === "DELETE")                                       { if (f) f.is_active = false; return { data: { success: true } } }
-    if (M === "GET"  && facMatch.rest.includes("availability")) return { data: { slots: [] } }
+    if (M === "GET"  && facMatch.rest.includes("availability")) {
+      // Same shape as the backend: existing pending/confirmed bookings that day
+      const dateParam = new URLSearchParams(qs).get("date")
+      const booked = BOOKINGS.filter(x => x.facility_id === facMatch.id && x.booking_date === dateParam &&
+        ["pending", "confirmed"].includes(x.status))
+      return { data: { facility_id: facMatch.id, date: dateParam, booked_slots: booked.map(x => ({ start: x.start_time, end: x.end_time, status: x.status })) } }
+    }
     if (M === "POST")                                         return { data: { url: "" } }
   }
 
@@ -302,7 +383,22 @@ async function handle(method, url, body) {
   }
   if (M === "POST" && path === "/bookings") {
     const facility = FACILITIES.find(f => f.id === body?.facility_id)
-    const b = { id: BOOKINGS.length + 1, user_id: user?.id, user_name: user?.name, facility_name: facility?.name, status: "pending", paid: false, payment_id: null, total_amount: 0, created_at: new Date().toISOString(), ...body }
+    // Same rules as the backend BookingListResource
+    const bad = (msg) => { throw { response: { status: 400, data: { message: msg } } } }
+    if (!facility) throw { response: { status: 404, data: { message: "Facility not found or inactive" } } }
+    if (!(body?.purpose || "").trim()) bad("Purpose is required")
+    const today = new Date(); today.setHours(0, 0, 0, 0)
+    const bDate = new Date(body?.booking_date + "T00:00:00")
+    if (isNaN(bDate)) bad("Invalid date/time format. Use YYYY-MM-DD and HH:MM")
+    if (bDate < today) bad("Cannot book for a past date")
+    if (body?.start_time >= body?.end_time) bad("Start time must be before end time")
+    const attendees = parseInt(body?.attendees ?? 1)
+    if (isNaN(attendees) || attendees < 1) bad("Attendees must be at least 1")
+    if (attendees > facility.capacity) bad(`Attendees exceed facility capacity of ${facility.capacity}`)
+    const clash = BOOKINGS.some(x => x.facility_id === facility.id && x.booking_date === body.booking_date &&
+      x.status !== "cancelled" && x.start_time < body.end_time && body.start_time < x.end_time)
+    if (clash) throw { response: { status: 409, data: { message: "This time slot is already booked" } } }
+    const b = { id: BOOKINGS.length + 1, user_id: user?.id, user_name: user?.name, facility_name: facility?.name, status: "pending", paid: false, payment_id: null, total_amount: 0, created_at: new Date().toISOString(), ...body, attendees }
     BOOKINGS.push(b)
     return { data: b }
   }
@@ -310,7 +406,13 @@ async function handle(method, url, body) {
   if (bookMatch) {
     const b = BOOKINGS.find(x => x.id === bookMatch.id)
     if (M === "PUT"  && !bookMatch.rest)                    { Object.assign(b, body); return { data: b } }
-    if (M === "PUT"  && bookMatch.rest.includes("status"))  { if (b) b.status = body?.status || b.status; return { data: b } }
+    if (M === "PUT"  && bookMatch.rest.includes("status"))  {
+      if (b && ["cancelled", "completed"].includes(b.status)) {
+        return Promise.reject({ response: { status: 400, data: { message: `A ${b.status} booking can no longer be changed` } } })
+      }
+      if (b) b.status = body?.status || b.status
+      return { data: b }
+    }
     if (M === "DELETE")                                     { if (b) b.status = "cancelled"; return { data: { success: true } } }
     if (M === "GET"  && bookMatch.rest.includes("invoice")) {
       const facility = FACILITIES.find(f => f.id === b?.facility_id)
@@ -367,10 +469,14 @@ async function handle(method, url, body) {
     return { data: POSTS.filter(p => p.category !== "announcement").map(p => ({ ...p })) }
   }
   if (M === "POST" && path === "/posts") {
+    const content = (body?.content || "").trim()
+    if (!content && !(body?.image_urls || []).length) {
+      throw { response: { status: 400, data: { message: "Content required" } } }
+    }
     // Only an admin can publish an official announcement — everyone else's
     // posts land in the regular community feed, announcement or not.
     const category = body?.category === "announcement" && user?.role === "admin" ? "announcement" : (body?.category || "general")
-    const p = { id: POSTS.length + 1, citizen_id: user?.id, author_name: user?.name, author_role: user?.role, author_department: user?.department || null, is_official: user?.role === "staff" || user?.role === "admin", likes_count: 0, comments_count: 0, liked_by_me: false, created_at: new Date().toISOString(), comments_list: [], image_urls: [], ...body, category }
+    const p = { id: POSTS.length + 1, citizen_id: user?.id, author_name: user?.name, author_role: user?.role, author_department: user?.department || null, is_official: user?.role === "staff" || user?.role === "admin", likes_count: 0, comments_count: 0, liked_by_me: false, created_at: new Date().toISOString(), comments_list: [], image_urls: [], ...body, content, category }
     POSTS.unshift(p)
     return { data: p }
   }
@@ -399,7 +505,9 @@ async function handle(method, url, body) {
     // make that comment show up twice (server-side push + client-side push).
     if (M === "GET"  && postMatch.rest.includes("comments"))  return { data: [...(p?.comments_list || [])] }
     if (M === "POST" && postMatch.rest.includes("comments")) {
-      const c = { id: Date.now(), user_id: user?.id, author_name: user?.name, author_department: user?.department || null, is_official: user?.role === "staff" || user?.role === "admin", content: body?.content, created_at: new Date().toISOString() }
+      const content = (body?.content || "").trim()
+      if (!content) throw { response: { status: 400, data: { message: "Content required" } } }
+      const c = { id: Date.now(), user_id: user?.id, author_name: user?.name, author_department: user?.department || null, is_official: user?.role === "staff" || user?.role === "admin", content, created_at: new Date().toISOString() }
       if (p) { p.comments_list.push(c); p.comments_count++ }
       return { data: c }
     }
@@ -434,6 +542,12 @@ async function handle(method, url, body) {
 function wrap(method) {
   return async (url, dataOrConfig, _config) => {
     const body = (method === "get" || method === "delete") ? null : dataOrConfig
+    // axios-style `{ params: {...} }` config on GET/DELETE → append as query string
+    const params = (method === "get" || method === "delete") ? dataOrConfig?.params : _config?.params
+    if (params && Object.keys(params).length) {
+      const qs = new URLSearchParams(params).toString()
+      url += (url.includes("?") ? "&" : "?") + qs
+    }
     try {
       return await handle(method, url, body)
     } catch (err) {
