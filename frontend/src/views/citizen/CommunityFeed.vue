@@ -117,6 +117,7 @@
 
 <script setup>
 import { ref, computed, onMounted } from 'vue'
+import { useRouter } from 'vue-router'
 import AppSidebar from '../../components/AppSidebar.vue'
 import AppTopbar from '../../components/AppTopbar.vue'
 import ImageGallery from '../../components/ImageGallery.vue'
@@ -126,7 +127,21 @@ import { useAuthStore } from '../../stores/auth'
 import api from '../../api'
 
 const auth = useAuthStore()
+const router = useRouter()
 const loading = ref(true)
+const subscribed = ref(true) // only meaningful for citizens; staff/admin are never gated
+const hasDue = ref(false)
+
+// Posting/liking/commenting requires an active, paid-up Premium subscription — citizens only.
+const needsSubscription = computed(() => auth.isCitizen && (!subscribed.value || hasDue.value))
+function promptSubscribe() {
+  const msg = hasDue.value
+    ? 'Your Premium subscription has an unpaid invoice. Pay it to continue?'
+    : 'This action needs an active Cyber Panchayat Premium subscription (₹100/month). Subscribe now?'
+  if (confirm(msg)) {
+    router.push('/subscription')
+  }
+}
 const posts = ref([])
 const tab = ref('all')
 const showCreatePost = ref(false)
@@ -141,6 +156,15 @@ const canShare = computed(() => !!(newPost.value.content.trim() || newPost.value
 
 onMounted(async () => {
   await loadPosts()
+  if (auth.isCitizen) {
+    try {
+      const { data } = await api.get('/subscriptions/me')
+      subscribed.value = data.subscribed
+      hasDue.value = !!data.due_payment
+    } catch {
+      subscribed.value = false
+    }
+  }
 })
 
 async function loadPosts() {
@@ -171,6 +195,7 @@ async function deletePost(post) {
 }
 
 async function toggleLike(post) {
+  if (needsSubscription.value) { promptSubscribe(); return }
   try {
     const res = await api.post(`/posts/${post.id}/like`)
     post.liked_by_me = res.data.liked
@@ -191,6 +216,7 @@ async function toggleComments(post) {
 
 async function addComment(post) {
   if (postingComment.value[post.id]) return
+  if (needsSubscription.value) { promptSubscribe(); return }
   const text = commentTexts.value[post.id]?.trim()
   if (!text) return
   postingComment.value[post.id] = true
@@ -220,6 +246,7 @@ async function deleteComment(post, comment) {
 }
 
 function openCreate() {
+  if (needsSubscription.value) { promptSubscribe(); return }
   resetCreate()
   showCreatePost.value = true
 }

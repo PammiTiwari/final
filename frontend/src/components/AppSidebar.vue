@@ -91,6 +91,7 @@ const citizenNav = [
     { label: 'My Bookings',   path: '/bookings' },
     { label: 'Payments',      path: '/payments' },
   ]},
+  { type: 'link', label: 'Premium Subscription', path: '/subscription' },
   { type: 'group', label: 'Community', items: [
     { label: 'Community Feed', path: '/feed' },
     { label: 'Announcements',  path: '/announcements' },
@@ -112,8 +113,9 @@ const adminNav = [
     { label: 'Officers',    path: '/admin/officers' },
   ]},
   { type: 'group', label: 'Resources', items: [
-    { label: 'Facilities', path: '/admin/facilities' },
-    { label: 'Bookings',   path: '/admin/bookings' },
+    { label: 'Facilities',     path: '/admin/facilities' },
+    { label: 'Bookings',       path: '/admin/bookings' },
+    { label: 'Subscriptions',  path: '/admin/subscriptions' },
   ]},
   { type: 'link', label: 'Users',         path: '/admin/users' },
   { type: 'link', label: 'Community',     path: '/admin/community' },

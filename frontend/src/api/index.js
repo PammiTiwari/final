@@ -5,6 +5,7 @@
 import {
   USERS, REQUESTS, DEPARTMENTS, OFFICERS,
   FACILITIES, BOOKINGS, PAYMENTS, NOTIFICATIONS, POSTS, ANNOUNCEMENTS,
+  SUBSCRIPTIONS, SUBSCRIPTION_PAYMENTS, SUBSCRIPTION_FEE,
 } from "./seed.js"
 
 const delay = (ms = 80) => new Promise(r => setTimeout(r, ms))
@@ -46,6 +47,98 @@ function matchId(url, prefix) {
 
 function byStatus(list, s) {
   return list.filter(r => r.status === s).length
+}
+
+// "HH:MM" strings -> decimal hours (handles half-hour slots correctly, unlike
+// a naive parseInt(str) which silently drops the minutes).
+function hoursBetween(start, end) {
+  const [sh, sm] = (start || "0:0").split(":").map(Number)
+  const [eh, em] = (end || "0:0").split(":").map(Number)
+  return (eh * 60 + em - (sh * 60 + sm)) / 60
+}
+
+// ── Subscription billing helpers (mirrors backend _add_month / _sync_subscription_billing) ──
+function addMonth(d) {
+  const day = d.getDate()
+  const next = new Date(d)
+  next.setMonth(next.getMonth() + 1)
+  if (next.getDate() !== day) next.setDate(0)
+  return next
+}
+function ymd(d) { return d.toISOString().split("T")[0] }
+
+function syncSubscriptionBilling(sub) {
+  if (sub.status !== "active") return
+  // Account disabled by admin — don't keep generating invoices a citizen has
+  // no way to log in and pay; existing history is left untouched.
+  const subscriber = Object.values(USERS).find(u => u.id === sub.citizen_id)
+  if (subscriber && !subscriber.is_active) return
+  const today = new Date(); today.setHours(0, 0, 0, 0)
+
+  if (sub.cancelled_at) {
+    // Cancellation was requested while still paid up — access continues
+    // (status stays "active") through the period already paid for, with no
+    // further renewal invoice. Once that period actually ends, the
+    // subscription closes out for real instead of billing again.
+    if (new Date(sub.next_billing_date + "T00:00:00") <= today) {
+      sub.status = "cancelled"
+    }
+    return
+  }
+
+  let guard = 0
+  while (new Date(sub.next_billing_date + "T00:00:00") <= today && guard < 24) {
+    const periodStart = sub.next_billing_date
+    const periodEnd = ymd(addMonth(new Date(periodStart + "T00:00:00")))
+    const exists = SUBSCRIPTION_PAYMENTS.find(p => p.subscription_id === sub.id && p.period_start === periodStart)
+    if (!exists) {
+      const nextPid = SUBSCRIPTION_PAYMENTS.reduce((m, p) => Math.max(m, p.id), 0) + 1
+      SUBSCRIPTION_PAYMENTS.push({
+        id: nextPid, subscription_id: sub.id, citizen_id: sub.citizen_id, citizen_name: sub.citizen_name,
+        amount: SUBSCRIPTION_FEE, period_start: periodStart, period_end: periodEnd,
+        status: "pending", method: null, transaction_ref: null,
+        created_at: new Date().toISOString(), paid_at: null,
+      })
+    }
+    sub.next_billing_date = periodEnd
+    guard++
+  }
+}
+function latestSubPaymentStatus(subId) {
+  const list = SUBSCRIPTION_PAYMENTS.filter(p => p.subscription_id === subId).sort((a, b) => b.id - a.id)
+  return list[0]?.status || null
+}
+function subToDict(sub) {
+  return {
+    ...sub,
+    latest_payment_status: latestSubPaymentStatus(sub.id),
+    // True while a cancelled-but-still-paid-up member keeps access through the
+    // period they already paid for — status only flips to "cancelled" for real
+    // once that period ends (see syncSubscriptionBilling).
+    pending_cancellation: !!(sub.cancelled_at && sub.status === "active"),
+  }
+}
+
+// Citizen-only paywall: filing a new complaint or posting/commenting/liking on
+// the community feed requires an active AND paid-up Premium subscription — an
+// "active" status with an unpaid invoice still doesn't grant access; the
+// citizen must actually clear what they owe (matches how a real subscription
+// only unlocks once payment clears, not just on clicking "Subscribe"). Staff/
+// admin are never gated. This only blocks *new* activity — complaints and
+// posts made while paid-up stay fully valid even after the subscription later
+// lapses or is cancelled.
+function requireActiveSubscription(user) {
+  if (!user || user.role !== "citizen") return null
+  const sub = SUBSCRIPTIONS.find(s => s.citizen_id === user.id && s.status === "active")
+  if (!sub) {
+    return { response: { status: 403, data: { message: `An active Cyber Panchayat Premium subscription (Rs.${SUBSCRIPTION_FEE}/month) is required for this action.` } } }
+  }
+  syncSubscriptionBilling(sub)
+  const due = SUBSCRIPTION_PAYMENTS.find(p => p.subscription_id === sub.id && p.status === "pending")
+  if (due) {
+    return { response: { status: 403, data: { message: `Your Premium subscription has an unpaid invoice of Rs.${due.amount} — please pay it to continue using this feature.` } } }
+  }
+  return null
 }
 
 // ── Route handler ─────────────────────────────────────────────────────────────
@@ -100,9 +193,15 @@ async function handle(method, url, body) {
   // Dashboard (returns different shape per role)
   if (M === "GET" && path === "/dashboard") {
     if (user?.role === "admin") {
+      const activeSubCount = SUBSCRIPTIONS.filter(s => s.status === "active").length
       return { data: {
         requests: { total: REQUESTS.length, pending: byStatus(REQUESTS,"pending"), assigned: byStatus(REQUESTS,"assigned"), reassigned: byStatus(REQUESTS,"reassigned"), in_progress: byStatus(REQUESTS,"in_progress"), on_hold_weather: byStatus(REQUESTS,"on_hold_weather"), reopened: byStatus(REQUESTS,"reopened"), resolved: byStatus(REQUESTS,"resolved"), closed: byStatus(REQUESTS,"closed") },
         users: { citizens: 5, staff: OFFICERS.length },
+        subscriptions: {
+          active: activeSubCount,
+          monthly_recurring_revenue: activeSubCount * SUBSCRIPTION_FEE,
+          total_collected: SUBSCRIPTION_PAYMENTS.filter(p => p.status === "paid").reduce((s, p) => s + p.amount, 0),
+        },
         recent: [...REQUESTS].slice(-5).reverse(),
       }}
     }
@@ -159,6 +258,8 @@ async function handle(method, url, body) {
     return { data: REQUESTS }
   }
   if (M === "POST" && path === "/requests") {
+    const subErr = requireActiveSubscription(user)
+    if (subErr) return Promise.reject(subErr)
     const nextId = REQUESTS.reduce((max, r) => Math.max(max, r.id), 0) + 1
     const newReq = { id: nextId, cmp_id: `CMP${String(nextId).padStart(4, "0")}`, citizen_id: user?.id, citizen_name: user?.name, status: "pending", priority: "medium", upvotes_count: 0, upvoted_by_me: false, pending_funds: false, reopen_count: 0, hold_reason: null, image_urls: [], evidence_urls: [], assignment: null, created_at: new Date().toISOString(), updated_at: new Date().toISOString(), ...body, department: DEPT_MAP[body?.category] || "General Affairs" }
     REQUESTS.push(newReq)
@@ -398,7 +499,20 @@ async function handle(method, url, body) {
     const clash = BOOKINGS.some(x => x.facility_id === facility.id && x.booking_date === body.booking_date &&
       x.status !== "cancelled" && x.start_time < body.end_time && body.start_time < x.end_time)
     if (clash) throw { response: { status: 409, data: { message: "This time slot is already booked" } } }
-    const b = { id: BOOKINGS.length + 1, user_id: user?.id, user_name: user?.name, facility_name: facility?.name, status: "pending", paid: false, payment_id: null, total_amount: 0, created_at: new Date().toISOString(), ...body, attendees }
+    const nextBookingId = BOOKINGS.reduce((max, x) => Math.max(max, x.id), 0) + 1
+    const fee = Math.round((facility.fee_per_hour || 0) * hoursBetween(body.start_time, body.end_time) * 100) / 100
+    const b = {
+      id: nextBookingId, citizen_id: user?.id, citizen_name: user?.name,
+      facility_id: facility.id, facility_name: facility.name, facility_type: facility.facility_type,
+      status: "pending", fee, admin_notes: null, payment: null,
+      created_at: new Date().toISOString(), ...body, attendees,
+    }
+    if (fee > 0) {
+      const nextPaymentId = PAYMENTS.reduce((max, p) => Math.max(max, p.id), 0) + 1
+      const payment = { id: nextPaymentId, booking_id: b.id, citizen_id: user?.id, citizen_name: user?.name, amount: fee, status: "pending", method: null, transaction_ref: null, created_at: new Date().toISOString(), paid_at: null }
+      PAYMENTS.push(payment)
+      b.payment = payment
+    }
     BOOKINGS.push(b)
     return { data: b }
   }
@@ -416,11 +530,11 @@ async function handle(method, url, body) {
     if (M === "DELETE")                                     { if (b) b.status = "cancelled"; return { data: { success: true } } }
     if (M === "GET"  && bookMatch.rest.includes("invoice")) {
       const facility = FACILITIES.find(f => f.id === b?.facility_id)
-      const hours = b ? (parseInt(b.end_time) - parseInt(b.start_time)) || 1 : 1
-      const subtotal = (facility?.fee_per_hour || 0) * hours
-      const gst = Math.round(subtotal * 0.18)
+      const hours = b ? hoursBetween(b.start_time, b.end_time) || 1 : 1
+      const subtotal = Math.round((facility?.fee_per_hour || 0) * hours * 100) / 100
+      const gst = Math.round(subtotal * 0.18 * 100) / 100
       return { data: {
-        invoice_number: `INV-${String(bookMatch.id).padStart(4,'0')}`,
+        invoice_number: `INV-${String(bookMatch.id).padStart(5,'0')}`,
         issued_at: new Date().toLocaleDateString('en-IN'),
         citizen_name: b?.citizen_name || user?.name,
         citizen_phone: user?.phone || '—',
@@ -431,30 +545,197 @@ async function handle(method, url, body) {
         end_time: b?.end_time,
         hours,
         purpose: b?.purpose,
+        attendees: b?.attendees,
         fee_per_hour: facility?.fee_per_hour || 0,
         subtotal,
         gst_18_percent: gst,
-        total: subtotal + gst,
-        payment_status: b?.payment?.status === "paid" ? 'paid' : (facility?.fee_per_hour === 0 ? 'free' : 'due'),
+        total: Math.round((subtotal + gst) * 100) / 100,
+        payment_status: b?.payment?.status || (facility?.fee_per_hour === 0 ? 'free' : 'due'),
       }}
-    }
-    if (M === "POST" && bookMatch.rest.includes("pay")) {
-      if (b) { b.paid = true; b.status = "approved"; b.payment_id = "PAY-" + Math.random().toString(36).slice(2,8).toUpperCase() }
-      const p = { id: PAYMENTS.length + 1, booking_id: bookMatch.id, user_id: user?.id, amount: b?.total_amount || 0, status: "paid", method: body?.method || "UPI", transaction_id: "TXN" + Math.random().toString(36).slice(2,10).toUpperCase(), created_at: new Date().toISOString(), facility_name: b?.facility_name }
-      PAYMENTS.push(p)
-      return { data: p }
     }
   }
 
   // Payments
   if (M === "GET" && path === "/payments") {
-    return { data: user?.role === "citizen" ? PAYMENTS.filter(p => p.citizen_id === user.id || p.citizen_name === user.name) : PAYMENTS }
+    return { data: user?.role === "citizen" ? PAYMENTS.filter(p => p.citizen_id === user.id) : PAYMENTS }
   }
   const payMatch = matchId(path, "/payments")
   if (payMatch && M === "POST" && payMatch.rest.includes("pay")) {
-    const p = { id: PAYMENTS.length + 1, user_id: user?.id, amount: body?.amount || 0, status: "paid", method: body?.method || "UPI", transaction_id: "TXN" + Math.random().toString(36).slice(2,10).toUpperCase(), created_at: new Date().toISOString() }
-    PAYMENTS.push(p)
+    const p = PAYMENTS.find(x => x.id === payMatch.id)
+    if (!p) return Promise.reject({ response: { status: 404, data: { message: "Not found" } } })
+    if (p.status !== "pending") {
+      return Promise.reject({ response: { status: 400, data: { message: `Payment is already ${p.status}` } } })
+    }
+    const validMethods = ["online", "upi", "card", "netbanking"]
+    const method = body?.method || "online"
+    if (!validMethods.includes(method)) {
+      return Promise.reject({ response: { status: 400, data: { message: "Invalid payment method" } } })
+    }
+    p.status = "paid"
+    p.method = method
+    p.transaction_ref = "TXN-" + Math.random().toString(36).slice(2, 12).toUpperCase()
+    p.paid_at = new Date().toISOString()
+    // Same object reference as booking.payment (PAYMENTS is derived from bookings
+    // at seed time, and new bookings attach the same object) — but confirm the
+    // booking's status explicitly too, since a fresh GET /bookings elsewhere
+    // reads booking.status directly.
+    const booking = BOOKINGS.find(x => x.id === p.booking_id)
+    if (booking && booking.status === "pending") booking.status = "confirmed"
     return { data: p }
+  }
+
+  // Subscriptions (Cyber Panchayat Premium — Rs.100/month recurring)
+  const subCitizenOnlyPaths = ["/subscriptions/me", "/subscriptions/subscribe", "/subscriptions/cancel", "/subscriptions/payments"]
+  if (subCitizenOnlyPaths.includes(path) && user?.role !== "citizen") {
+    return Promise.reject({ response: { status: 403, data: { message: "Forbidden" } } })
+  }
+  if (M === "GET" && path === "/subscriptions/me") {
+    const sub = SUBSCRIPTIONS.find(s => s.citizen_id === user?.id)
+    if (!sub) return { data: { subscribed: false, subscription: null, due_payment: null, monthly_fee: SUBSCRIPTION_FEE } }
+    syncSubscriptionBilling(sub)
+    const due = SUBSCRIPTION_PAYMENTS.find(p => p.subscription_id === sub.id && p.status === "pending")
+    return { data: {
+      subscribed: sub.status === "active",
+      subscription: subToDict(sub),
+      due_payment: due || null,
+      monthly_fee: SUBSCRIPTION_FEE,
+    }}
+  }
+  if (M === "POST" && path === "/subscriptions/subscribe") {
+    let sub = SUBSCRIPTIONS.find(s => s.citizen_id === user?.id)
+    if (sub && sub.status === "active") {
+      if (sub.cancelled_at) {
+        // Undo a pending cancellation — still within the period already paid
+        // for, so no new charge is needed, just resume auto-renewal.
+        sub.cancelled_at = null
+        return { data: { message: "Subscription resumed", subscription: subToDict(sub) } }
+      }
+      throw { response: { status: 400, data: { message: "You already have an active subscription" } } }
+    }
+    const today = new Date(); today.setHours(0, 0, 0, 0)
+    const periodEnd = ymd(addMonth(today))
+    if (sub) {
+      // started_at is deliberately left untouched on a resubscribe — it's the
+      // citizen's original join date, not reset every time they lapse and come
+      // back (otherwise "Member since" could show a date *after* an older paid
+      // invoice still sitting in their billing history).
+      Object.assign(sub, { status: "active", next_billing_date: periodEnd, cancelled_at: null })
+    } else {
+      const nextId = SUBSCRIPTIONS.reduce((m, s) => Math.max(m, s.id), 0) + 1
+      sub = { id: nextId, citizen_id: user.id, citizen_name: user.name, citizen_email: user.email,
+        status: "active", monthly_fee: SUBSCRIPTION_FEE, started_at: new Date().toISOString(),
+        next_billing_date: periodEnd, cancelled_at: null }
+      SUBSCRIPTIONS.push(sub)
+    }
+    // Idempotency guard in case a payment for today's cycle already exists.
+    let payment = SUBSCRIPTION_PAYMENTS.find(p => p.subscription_id === sub.id && p.period_start === ymd(today))
+    if (!payment) {
+      const nextPid = SUBSCRIPTION_PAYMENTS.reduce((m, p) => Math.max(m, p.id), 0) + 1
+      payment = { id: nextPid, subscription_id: sub.id, citizen_id: user.id, citizen_name: user.name,
+        amount: SUBSCRIPTION_FEE, period_start: ymd(today), period_end: periodEnd,
+        status: "pending", method: null, transaction_ref: null, created_at: new Date().toISOString(), paid_at: null }
+      SUBSCRIPTION_PAYMENTS.push(payment)
+    }
+    return { data: { subscription: subToDict(sub), due_payment: payment } }
+  }
+  if (M === "POST" && path === "/subscriptions/cancel") {
+    const sub = SUBSCRIPTIONS.find(s => s.citizen_id === user?.id)
+    if (!sub || sub.status !== "active" || sub.cancelled_at) {
+      return Promise.reject({ response: { status: 400, data: { message: "You don't have an active subscription" } } })
+    }
+    const due = SUBSCRIPTION_PAYMENTS.find(p => p.subscription_id === sub.id && p.status === "pending")
+    if (due) {
+      // Nothing paid for the cycle in progress — there's no "already paid for"
+      // time to honor, so cancellation ends access immediately. The unpaid
+      // invoice is waived rather than left dangling (also prevents a later
+      // resubscribe from creating a second, overlapping invoice on top of one
+      // that was never resolved).
+      for (let i = SUBSCRIPTION_PAYMENTS.length - 1; i >= 0; i--) {
+        const p = SUBSCRIPTION_PAYMENTS[i]
+        if (p.subscription_id === sub.id && p.status === "pending") SUBSCRIPTION_PAYMENTS.splice(i, 1)
+      }
+      sub.status = "cancelled"
+      sub.cancelled_at = new Date().toISOString()
+      return { data: { message: "Subscription cancelled", subscription: subToDict(sub) } }
+    }
+    // Fully paid up — keep access (and stay "active") through the period
+    // already paid for; only stop auto-renewing. syncSubscriptionBilling flips
+    // status to "cancelled" for real once next_billing_date passes.
+    sub.cancelled_at = new Date().toISOString()
+    return { data: {
+      message: `Subscription will stay active until ${sub.next_billing_date}, then it won't renew.`,
+      subscription: subToDict(sub),
+    }}
+  }
+  if (M === "GET" && path === "/subscriptions/payments") {
+    const sub = SUBSCRIPTIONS.find(s => s.citizen_id === user?.id)
+    if (!sub) return { data: [] }
+    syncSubscriptionBilling(sub)
+    const list = SUBSCRIPTION_PAYMENTS.filter(p => p.subscription_id === sub.id)
+      .slice().sort((a, b) => b.period_start.localeCompare(a.period_start))
+    return { data: list }
+  }
+  const subPayMatch = matchId(path, "/subscriptions/payments")
+  if (subPayMatch) {
+    const p = SUBSCRIPTION_PAYMENTS.find(x => x.id === subPayMatch.id)
+    if (M === "POST" && subPayMatch.rest.includes("pay")) {
+      if (!p) return Promise.reject({ response: { status: 404, data: { message: "Not found" } } })
+      if (p.citizen_id !== user?.id) return Promise.reject({ response: { status: 403, data: { message: "Forbidden" } } })
+      if (p.status !== "pending") {
+        return Promise.reject({ response: { status: 400, data: { message: `Payment is already ${p.status}` } } })
+      }
+      const validMethods = ["online", "upi", "card", "netbanking"]
+      const method = body?.method || "online"
+      if (!validMethods.includes(method)) {
+        return Promise.reject({ response: { status: 400, data: { message: "Invalid payment method" } } })
+      }
+      const today = new Date(); today.setHours(0, 0, 0, 0)
+      const sub = SUBSCRIPTIONS.find(s => s.id === p.subscription_id)
+      // Paid late — if this is the subscription's current (frontier) cycle, not
+      // an older backlogged one, shift it to start today so the citizen gets a
+      // genuine full month of access from the day they actually pay, instead of
+      // losing the days they spent blocked while it sat unpaid.
+      if (today > new Date(p.period_start + "T00:00:00") && sub && sub.next_billing_date === p.period_end) {
+        p.period_start = ymd(today)
+        p.period_end = ymd(addMonth(today))
+        sub.next_billing_date = p.period_end
+      }
+      p.status = "paid"
+      p.method = method
+      p.transaction_ref = "SUB-TXN-" + Math.random().toString(36).slice(2, 12).toUpperCase()
+      p.paid_at = new Date().toISOString()
+      return { data: p }
+    }
+    if (M === "GET" && subPayMatch.rest.includes("invoice")) {
+      if (!p) return Promise.reject({ response: { status: 404, data: { message: "Not found" } } })
+      if (user?.role === "staff") return Promise.reject({ response: { status: 403, data: { message: "Access denied" } } })
+      if (user?.role === "citizen" && p.citizen_id !== user.id) {
+        return Promise.reject({ response: { status: 403, data: { message: "Access denied" } } })
+      }
+      return { data: {
+        invoice_number: `SUB-INV-${String(p.id).padStart(5, '0')}`,
+        payment_id: p.id, citizen_name: p.citizen_name, citizen_email: user?.email || '',
+        plan: "Cyber Panchayat Premium Membership",
+        period_start: p.period_start, period_end: p.period_end,
+        amount: p.amount, status: p.status, method: p.method, transaction_ref: p.transaction_ref,
+        paid_at: p.paid_at, issued_at: new Date().toLocaleDateString('en-IN'),
+      }}
+    }
+  }
+  if (M === "GET" && path === "/admin/subscriptions") {
+    if (user?.role !== "admin") return Promise.reject({ response: { status: 403, data: { message: "Forbidden" } } })
+    SUBSCRIPTIONS.forEach(s => syncSubscriptionBilling(s))
+    const activeCount = SUBSCRIPTIONS.filter(s => s.status === "active").length
+    const totalCollected = SUBSCRIPTION_PAYMENTS.filter(p => p.status === "paid").reduce((s, p) => s + p.amount, 0)
+    const pendingCount = SUBSCRIPTION_PAYMENTS.filter(p => p.status === "pending").length
+    return { data: {
+      subscriptions: SUBSCRIPTIONS.map(subToDict),
+      stats: {
+        active: activeCount, cancelled: SUBSCRIPTIONS.length - activeCount,
+        monthly_recurring_revenue: activeCount * SUBSCRIPTION_FEE,
+        total_collected: totalCollected, pending_payments: pendingCount,
+      },
+    }}
   }
 
   // Posts
@@ -469,6 +750,8 @@ async function handle(method, url, body) {
     return { data: POSTS.filter(p => p.category !== "announcement").map(p => ({ ...p })) }
   }
   if (M === "POST" && path === "/posts") {
+    const subErr = requireActiveSubscription(user)
+    if (subErr) return Promise.reject(subErr)
     const content = (body?.content || "").trim()
     if (!content && !(body?.image_urls || []).length) {
       throw { response: { status: 400, data: { message: "Content required" } } }
@@ -499,12 +782,19 @@ async function handle(method, url, body) {
       return { data: { success: true } }
     }
     if (M === "DELETE")                                       { const i = POSTS.indexOf(p); if (i > -1) POSTS.splice(i, 1); return { data: { success: true } } }
-    if (M === "POST" && postMatch.rest.includes("like"))      { if (p) { p.liked_by_me = !p.liked_by_me; p.likes_count += p.liked_by_me ? 1 : -1 } return { data: { liked: p?.liked_by_me, likes_count: p?.likes_count } } }
+    if (M === "POST" && postMatch.rest.includes("like")) {
+      const subErr = requireActiveSubscription(user)
+      if (subErr) return Promise.reject(subErr)
+      if (p) { p.liked_by_me = !p.liked_by_me; p.likes_count += p.liked_by_me ? 1 : -1 }
+      return { data: { liked: p?.liked_by_me, likes_count: p?.likes_count } }
+    }
     // Return a copy, not the live array — the frontend also appends its own new
     // comment locally after posting, so sharing the same reference here would
     // make that comment show up twice (server-side push + client-side push).
     if (M === "GET"  && postMatch.rest.includes("comments"))  return { data: [...(p?.comments_list || [])] }
     if (M === "POST" && postMatch.rest.includes("comments")) {
+      const subErr = requireActiveSubscription(user)
+      if (subErr) return Promise.reject(subErr)
       const content = (body?.content || "").trim()
       if (!content) throw { response: { status: 400, data: { message: "Content required" } } }
       const c = { id: Date.now(), user_id: user?.id, author_name: user?.name, author_department: user?.department || null, is_official: user?.role === "staff" || user?.role === "admin", content, created_at: new Date().toISOString() }

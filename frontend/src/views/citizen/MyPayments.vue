@@ -35,40 +35,30 @@
         </div>
 
         <div v-else class="card">
-          <div class="table-wrapper">
-            <table class="data-table">
-              <thead>
-                <tr>
-                  <th>Txn Reference</th>
-                  <th>Facility</th>
-                  <th class="text-right">Amount</th>
-                  <th>Method</th>
-                  <th class="text-center">Status</th>
-                  <th>Date</th>
-                  <th>Action</th>
-                </tr>
-              </thead>
-              <tbody>
-                <tr v-for="p in payments" :key="p.id">
-                  <td class="td-txn">{{ p.transaction_ref || ('TXN-' + p.id) }}</td>
-                  <td class="td-facility">
-                    {{ bookingMap[p.booking_id]?.facility_name || ('Booking #' + p.booking_id) }}
-                  </td>
-                  <td class="text-right font-bold">₹{{ p.amount }}</td>
-                  <td class="td-method">{{ methodLabel(p.method) }}</td>
-                  <td class="text-center">
-                    <span :class="['badge', `badge-${p.status}`]">{{ p.status }}</span>
-                  </td>
-                  <td class="td-date">
-                    {{ p.paid_at ? fmtDate(p.paid_at) : fmtDate(p.created_at) }}
-                  </td>
-                  <td>
-                    <button v-if="p.status === 'pending'" class="btn btn-xs btn-success"
-                            @click="openPay(p)">Pay Now</button>
-                  </td>
-                </tr>
-              </tbody>
-            </table>
+          <div class="payment-list">
+            <div class="payment-row payment-head">
+              <div class="pcol-facility">Facility</div>
+              <div class="pcol-amount">Amount</div>
+              <div class="pcol-status">Status</div>
+              <div class="pcol-date">Date</div>
+              <div class="pcol-action">Action</div>
+            </div>
+            <div v-for="p in payments" :key="p.id" class="payment-row">
+              <div class="pcol-facility">
+                <div class="payment-facility-main">{{ bookingMap[p.booking_id]?.facility_name || ('Booking #' + p.booking_id) }}</div>
+                <div class="payment-facility-sub">{{ p.transaction_ref || ('TXN-' + p.id) }} · {{ methodLabel(p.method) }}</div>
+              </div>
+              <div class="pcol-amount">
+                <div class="payment-amount-val">₹{{ p.amount }}</div>
+              </div>
+              <div class="pcol-status">
+                <span :class="['badge', `badge-${p.status}`]">{{ p.status }}</span>
+              </div>
+              <div class="pcol-date">{{ p.paid_at ? fmtDate(p.paid_at) : fmtDate(p.created_at) }}</div>
+              <div class="pcol-action">
+                <button v-if="p.status === 'pending'" class="btn btn-xs btn-success" @click="openPay(p)">Pay Now</button>
+              </div>
+            </div>
           </div>
         </div>
 
@@ -187,10 +177,40 @@ function fmtDate(iso) {
 .stat-warn .stat-val { color: #A66E00; }
 .stat-muted .stat-val { color: #9B2C6F; }
 
-.td-txn    { font-family: monospace; font-size: 0.8rem; color: #9B2C6F; }
-.td-facility { font-size: 0.85rem; font-weight: 500; }
-.td-method { font-size: 0.84rem; color: #9B2C6F; }
-.td-date   { font-size: 0.82rem; color: #B0708F; white-space: nowrap; }
+/* ── Row layout instead of a raw table — keeps the Action column a fixed
+   width whether or not a "Pay Now" button is present in that row ────────── */
+.payment-list { display: flex; flex-direction: column; }
+.payment-row {
+  display: grid;
+  grid-template-columns: 1.6fr 100px 100px 120px 110px;
+  align-items: center;
+  gap: 1rem;
+  padding: 0.9rem 0.25rem;
+  border-bottom: 1px solid #FFE9F2;
+}
+.payment-row:last-child { border-bottom: none; }
+.payment-row:not(.payment-head):hover { background: #FFF7FB; }
+.payment-head {
+  font-size: 0.7rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em;
+  color: #B0708F; padding-bottom: 0.6rem; border-bottom: 1px solid #FFD1E6;
+}
+.payment-facility-main { font-size: 0.88rem; font-weight: 700; color: #5C1A41; }
+.payment-facility-sub { font-family: monospace; font-size: 0.74rem; color: #B0708F; margin-top: 0.15rem; }
+.pcol-amount { text-align: right; }
+.payment-amount-val { font-size: 0.92rem; font-weight: 800; color: #5C1A41; }
+.pcol-status { text-align: center; }
+.pcol-date { font-size: 0.82rem; color: #B0708F; white-space: nowrap; }
+.pcol-action { display: flex; justify-content: flex-end; }
+
+@media (max-width: 760px) {
+  .payment-row { grid-template-columns: 1fr auto; grid-template-areas: "facility amount" "status date" "action action"; row-gap: 0.5rem; }
+  .payment-row.payment-head { display: none; }
+  .pcol-facility { grid-area: facility; }
+  .pcol-amount { grid-area: amount; }
+  .pcol-status { grid-area: status; text-align: left; }
+  .pcol-date { grid-area: date; text-align: right; }
+  .pcol-action { grid-area: action; }
+}
 
 .btn-xs {
   padding: 0.22rem 0.65rem; font-size: 0.72rem;

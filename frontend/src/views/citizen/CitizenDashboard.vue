@@ -14,6 +14,15 @@
 
         <div v-if="loading" class="spinner"></div>
         <template v-else>
+          <div v-if="subBanner" class="sub-banner">
+            <div class="sub-banner-icon">⭐</div>
+            <div class="sub-banner-text">
+              <strong>{{ subBanner.title }}</strong>
+              <p>{{ subBanner.desc }}</p>
+            </div>
+            <router-link to="/subscription" class="btn btn-primary btn-sm">{{ subBanner.cta }}</router-link>
+          </div>
+
           <div class="stats-grid">
             <div class="stat-card">
               <div class="stat-icon icon-blue">&#9776;</div>
@@ -79,7 +88,7 @@
 </template>
 
 <script setup>
-import { ref, onMounted } from 'vue'
+import { ref, computed, onMounted } from 'vue'
 import AppSidebar from '../../components/AppSidebar.vue'
 import AppTopbar from '../../components/AppTopbar.vue'
 import { useAuthStore } from '../../stores/auth'
@@ -91,8 +100,35 @@ const loading = ref(true)
 const stats = ref({})
 const requests = ref([])
 const unread = ref(0)
+const subInfo = ref(null)
+
+// Filing a complaint or joining the community feed needs an active, paid-up
+// Premium subscription — this just explains that to a new citizen so the
+// "locked" screen on Submit Complaint doesn't come as a surprise.
+const subBanner = computed(() => {
+  if (!subInfo.value) return null
+  if (!subInfo.value.subscription) {
+    return {
+      title: 'Unlock full access to Cyber Panchayat',
+      desc: `Subscribe to Premium (₹${subInfo.value.monthly_fee}/month) to file complaints and join the community feed. Browsing and tracking stay free.`,
+      cta: 'Subscribe Now',
+    }
+  }
+  if (subInfo.value.due_payment) {
+    return {
+      title: 'Payment due on your Premium subscription',
+      desc: `Pay ₹${subInfo.value.due_payment.amount} to keep filing complaints and posting on the community feed.`,
+      cta: 'Pay Now',
+    }
+  }
+  return null
+})
 
 onMounted(async () => {
+  // Fetched separately from the core dashboard data below — a hiccup here
+  // should never block stats/recent-complaints from showing.
+  api.get('/subscriptions/me').then(res => { subInfo.value = res.data }).catch(() => {})
+
   try {
     const [dash, reqs, notifs] = await Promise.all([
       api.get('/dashboard'),
@@ -119,5 +155,20 @@ function fmtDate(d) {
 .card-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem; }
 .cmp-id { font-family: monospace; font-size: 0.8rem; background: #FFE9F2; padding: 0.1rem 0.35rem; border-radius: 4px; }
 .cat-badge { font-size: 0.75rem; font-weight: 600; color: #9B2C6F; text-transform: capitalize; }
+
+.sub-banner {
+  display: flex; align-items: center; gap: 1rem;
+  background: linear-gradient(135deg, #FFE9F2, #FFF3FA);
+  border: 1px solid #FFD1E6; border-radius: 14px;
+  padding: 1rem 1.25rem; margin-bottom: 1.5rem;
+}
+.sub-banner-icon {
+  width: 40px; height: 40px; flex-shrink: 0; border-radius: 10px;
+  background: #E0218A; color: #fff;
+  display: flex; align-items: center; justify-content: center; font-size: 1.1rem;
+}
+.sub-banner-text { flex: 1; min-width: 0; }
+.sub-banner-text strong { font-size: 0.9rem; color: #5C1A41; }
+.sub-banner-text p { font-size: 0.8rem; color: #9B2C6F; margin-top: 0.2rem; }
 .td-title { max-width: 220px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-size: 0.85rem; }
 </style>

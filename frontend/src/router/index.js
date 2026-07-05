@@ -30,6 +30,7 @@ const routes = [
   { path: "/facilities", name: "facilities", component: () => import("../views/citizen/FacilitiesView.vue"), meta: { roles: ["citizen"] } },
   { path: "/bookings", name: "my-bookings", component: () => import("../views/citizen/MyBookings.vue"), meta: { roles: ["citizen"] } },
   { path: "/payments", name: "my-payments", component: () => import("../views/citizen/MyPayments.vue"), meta: { roles: ["citizen"] } },
+  { path: "/subscription", name: "my-subscription", component: () => import("../views/citizen/MySubscription.vue"), meta: { roles: ["citizen"] } },
 
   // Staff routes
   { path: "/staff/dashboard", name: "staff-dashboard", component: () => import("../views/staff/StaffDashboard.vue"), meta: { roles: ["staff"] } },
@@ -50,6 +51,7 @@ const routes = [
   { path: "/admin/users", name: "admin-users", component: () => import("../views/admin/ManageUsers.vue"), meta: { roles: ["admin"] } },
   { path: "/admin/facilities", name: "admin-facilities", component: () => import("../views/admin/ManageFacilities.vue"), meta: { roles: ["admin"] } },
   { path: "/admin/bookings", name: "admin-bookings", component: () => import("../views/admin/ManageBookings.vue"), meta: { roles: ["admin"] } },
+  { path: "/admin/subscriptions", name: "admin-subscriptions", component: () => import("../views/admin/ManageSubscriptions.vue"), meta: { roles: ["admin"] } },
 
   { path: "/:pathMatch(.*)*", redirect: "/" },
 ]
