@@ -305,3 +305,50 @@ export const POSTS = [
 ]
 
 export const ANNOUNCEMENTS = POSTS.filter(p => p.category === "announcement")
+
+// ── Subscriptions (Cyber Panchayat Premium — Rs.100/month) ─────────────────────
+// Mirrors backend/apps/__init__.py's subscription seed block: only the first
+// billing cycle is seeded by hand; any cycle that's since come due is generated
+// lazily by the same on-read sync logic in index.js (mirrors the backend's
+// _sync_subscription_billing) — anchored to the real current date, not the
+// fixed 2026-07-01 reference the rest of this file's daysAgo() uses, since that's
+// what actually drives whether a cycle is "due" right now.
+export const SUBSCRIPTION_FEE = 100
+
+function addMonth(d) {
+  const day = d.getDate()
+  const next = new Date(d)
+  next.setMonth(next.getMonth() + 1)
+  if (next.getDate() !== day) next.setDate(0) // clamp overflow, e.g. Jan 31 -> Feb 28
+  return next
+}
+function realDaysAgo(n) {
+  const d = new Date()
+  d.setDate(d.getDate() - n)
+  d.setHours(10, 0, 0, 0)
+  return d
+}
+function ymd(d) { return d.toISOString().split("T")[0] }
+
+const amitStart = realDaysAgo(40)
+const amitP1End = addMonth(amitStart)
+const raviStart = realDaysAgo(20)
+const raviP1End = addMonth(raviStart)
+const arjunStart = realDaysAgo(50)
+const arjunP1End = addMonth(arjunStart)
+
+export const SUBSCRIPTIONS = [
+  // Active, first cycle already paid, but that cycle has ended — the next
+  // cycle's payment shows up as "due" the moment this is next read.
+  { id: 1, citizen_id: 7, citizen_name: "Amit Sharma", citizen_email: "amit@gmail.com", status: "active", monthly_fee: SUBSCRIPTION_FEE, started_at: amitStart.toISOString(), next_billing_date: ymd(amitP1End), cancelled_at: null },
+  // Active, fully paid up, current cycle still running — nothing due yet.
+  { id: 2, citizen_id: 9, citizen_name: "Ravi Gupta", citizen_email: "ravi.g@gmail.com", status: "active", monthly_fee: SUBSCRIPTION_FEE, started_at: raviStart.toISOString(), next_billing_date: ymd(raviP1End), cancelled_at: null },
+  // Cancelled — a churned member, for admin's subscription list.
+  { id: 3, citizen_id: 11, citizen_name: "Arjun Singh", citizen_email: "arjun@gmail.com", status: "cancelled", monthly_fee: SUBSCRIPTION_FEE, started_at: arjunStart.toISOString(), next_billing_date: ymd(arjunP1End), cancelled_at: realDaysAgo(5).toISOString() },
+]
+
+export const SUBSCRIPTION_PAYMENTS = [
+  { id: 1, subscription_id: 1, citizen_id: 7, citizen_name: "Amit Sharma", amount: SUBSCRIPTION_FEE, period_start: ymd(amitStart), period_end: ymd(amitP1End), status: "paid", method: "upi", transaction_ref: "SUB-TXN-C0BAE1AB3E", created_at: amitStart.toISOString(), paid_at: realDaysAgo(39).toISOString() },
+  { id: 2, subscription_id: 2, citizen_id: 9, citizen_name: "Ravi Gupta", amount: SUBSCRIPTION_FEE, period_start: ymd(raviStart), period_end: ymd(raviP1End), status: "paid", method: "card", transaction_ref: "SUB-TXN-F5ACC0598F", created_at: raviStart.toISOString(), paid_at: realDaysAgo(19).toISOString() },
+  { id: 3, subscription_id: 3, citizen_id: 11, citizen_name: "Arjun Singh", amount: SUBSCRIPTION_FEE, period_start: ymd(arjunStart), period_end: ymd(arjunP1End), status: "paid", method: "online", transaction_ref: "SUB-TXN-DF2D3C7947", created_at: arjunStart.toISOString(), paid_at: realDaysAgo(49).toISOString() },
+]

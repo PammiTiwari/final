@@ -27,7 +27,7 @@
               <thead>
                 <tr>
                   <th>ID</th><th>Name</th><th>Email</th><th>Role</th>
-                  <th>Ward / Department</th><th>Phone</th><th>Status</th><th>Joined</th><th>Actions</th>
+                  <th>Ward / Department</th><th>Phone</th><th>Subscription</th><th>Status</th><th>Joined</th><th>Actions</th>
                 </tr>
               </thead>
               <tbody>
@@ -46,6 +46,12 @@
                   <!-- Citizens belong to a ward; officers/admin work department-wide across all wards -->
                   <td class="text-sm">{{ u.role === 'citizen' ? (u.ward || '—') : (u.department || '—') }}</td>
                   <td class="text-sm">{{ u.phone || '—' }}</td>
+                  <td>
+                    <span v-if="subMap[u.id]" :class="`sub-badge sub-${subMap[u.id].status}`">
+                      {{ subMap[u.id].status === 'active' ? '⭐ Premium' : 'Cancelled' }}
+                    </span>
+                    <span v-else class="text-xs text-faint">—</span>
+                  </td>
                   <td>
                     <span :class="u.is_active ? 'badge-active' : 'badge-inactive'">
                       {{ u.is_active ? 'Active' : 'Disabled' }}
@@ -120,11 +126,18 @@ import api from "../../api"
 
 const loading = ref(true)
 const users = ref([])
+const subscriptions = ref([])
 const showNotif = ref(false)
 const unread = ref(0)
 const roleFilter = ref("")
 const search = ref("")
 const wards = ["Ward-1","Ward-2","Ward-3","Central"]
+
+const subMap = computed(() => {
+  const m = {}
+  subscriptions.value.forEach(s => { m[s.citizen_id] = s })
+  return m
+})
 
 const filtered = computed(() => {
   return users.value.filter(u => {
@@ -140,9 +153,12 @@ const filtered = computed(() => {
 const editModal = ref({ show: false, user: null, role: "", ward: "", loading: false, error: "" })
 
 onMounted(async () => {
-  const [uRes, nRes] = await Promise.all([api.get("/admin/users"), api.get("/notifications")])
+  const [uRes, nRes, sRes] = await Promise.all([
+    api.get("/admin/users"), api.get("/notifications"), api.get("/admin/subscriptions"),
+  ])
   users.value = uRes.data
   unread.value = nRes.data.unread_count
+  subscriptions.value = sRes.data.subscriptions
   loading.value = false
 })
 
@@ -204,4 +220,7 @@ function fmtDate(iso) {
 .role-admin { background: rgba(255,45,111,0.15); color: #FF2D6F; }
 .badge-active { color: var(--success); font-size: 0.83rem; font-weight: 700; }
 .badge-inactive { color: var(--danger); font-size: 0.83rem; font-weight: 700; }
+.sub-badge { display: inline-block; padding: 0.2rem 0.6rem; border-radius: 100px; font-size: 0.72rem; font-weight: 700; }
+.sub-active { background: rgba(224,33,138,0.14); color: #E0218A; }
+.sub-cancelled { background: rgba(148,163,184,0.2); color: #64748B; }
 </style>

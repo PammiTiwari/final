@@ -10,7 +10,23 @@
           </div>
         </div>
 
-        <div class="form-container card">
+        <div v-if="checkingSub" class="spinner"></div>
+
+        <div v-else-if="!subscribed" class="card locked-card">
+          <div class="locked-icon">🔒</div>
+          <h2 class="locked-title">Premium Subscription Required</h2>
+          <p class="locked-text">Filing a complaint needs an active Cyber Panchayat Premium subscription — ₹100/month.</p>
+          <router-link to="/subscription" class="btn btn-primary">Subscribe Now</router-link>
+        </div>
+
+        <div v-else-if="hasDue" class="card locked-card">
+          <div class="locked-icon">🔒</div>
+          <h2 class="locked-title">Payment Due</h2>
+          <p class="locked-text">Your Premium subscription has an unpaid invoice of ₹{{ dueAmount }}. Pay it to continue filing complaints.</p>
+          <router-link to="/subscription" class="btn btn-primary">Pay Now</router-link>
+        </div>
+
+        <div v-else class="form-container card">
           <div v-if="success" class="alert alert-success">
             Complaint submitted successfully! ID: <strong>{{ submittedId }}</strong>
             <router-link to="/complaints" class="ml-3 underline">View all complaints</router-link>
@@ -121,7 +137,7 @@
 </template>
 
 <script setup>
-import { ref } from 'vue'
+import { ref, onMounted } from 'vue'
 import AppSidebar from '../../components/AppSidebar.vue'
 import AppTopbar from '../../components/AppTopbar.vue'
 import LocationPicker from '../../components/LocationPicker.vue'
@@ -131,6 +147,23 @@ import { useAuthStore } from '../../stores/auth'
 import api from '../../api'
 
 const auth = useAuthStore()
+const checkingSub = ref(true)
+const subscribed = ref(false)
+const hasDue = ref(false)
+const dueAmount = ref(0)
+
+onMounted(async () => {
+  try {
+    const { data } = await api.get('/subscriptions/me')
+    subscribed.value = data.subscribed
+    hasDue.value = !!data.due_payment
+    dueAmount.value = data.due_payment?.amount || 0
+  } catch {
+    subscribed.value = false
+  } finally {
+    checkingSub.value = false
+  }
+})
 
 const form = ref({
   category: '',
@@ -252,6 +285,10 @@ function onUpvoted(item) {
 
 <style scoped>
 .form-container { max-width: 640px; }
+.locked-card { max-width: 480px; margin: 0 auto; text-align: center; padding: 2.5rem; }
+.locked-icon { font-size: 2.2rem; margin-bottom: 0.75rem; }
+.locked-title { font-size: 1.15rem; font-weight: 800; color: var(--navy); margin-bottom: 0.5rem; }
+.locked-text { font-size: 0.88rem; color: var(--text-muted); margin-bottom: 1.25rem; }
 .req { color: var(--danger); }
 .form-actions { display: flex; gap: 0.75rem; justify-content: flex-end; margin-top: 0.5rem; }
 .category-row { display: flex; gap: 0.5rem; align-items: center; }

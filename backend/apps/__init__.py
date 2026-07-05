@@ -339,5 +339,58 @@ def _seed_data():
     ]
     db.session.add_all(payments)
 
+    # ── Subscriptions (Cyber Panchayat Premium — Rs.100/month) ────────────────
+    # Only the first billing cycle is seeded by hand; the live lazy-sync
+    # (_sync_subscription_billing, called from /subscriptions/me and
+    # /admin/subscriptions) generates any cycle that's since come due the
+    # first time each subscription is actually read — same mechanism a real
+    # user would trigger, just demonstrated from seed data instead of a fresh
+    # signup.
+    from .models import Subscription, SubscriptionPayment, SubscriptionStatus, SUBSCRIPTION_FEE
+    from .api import _add_month
+
+    def sub_txn():
+        return f"SUB-TXN-{uuid.uuid4().hex[:10].upper()}"
+
+    # Amit Sharma — subscribed 40 days ago; first cycle paid, and since that
+    # cycle has already ended, the next cycle's payment shows up as "due" the
+    # moment this subscription is next read.
+    amit_p1_start = dt(40).date()
+    amit_p1_end = _add_month(amit_p1_start)
+    sub_amit = Subscription(citizen_id=c1.id, status=SubscriptionStatus.ACTIVE,
+                             started_at=dt(40), next_billing_date=amit_p1_end)
+    db.session.add(sub_amit)
+    db.session.flush()
+    db.session.add(SubscriptionPayment(
+        subscription_id=sub_amit.id, citizen_id=c1.id, amount=SUBSCRIPTION_FEE,
+        period_start=amit_p1_start, period_end=amit_p1_end,
+        status=PaymentStatus.PAID, method="upi", transaction_ref=sub_txn(), paid_at=dt(39)))
+
+    # Ravi Gupta — subscribed 20 days ago, first cycle paid, current cycle
+    # still running (nothing due yet) — a "good standing" premium member.
+    ravi_p1_start = dt(20).date()
+    ravi_p1_end = _add_month(ravi_p1_start)
+    sub_ravi = Subscription(citizen_id=c3.id, status=SubscriptionStatus.ACTIVE,
+                             started_at=dt(20), next_billing_date=ravi_p1_end)
+    db.session.add(sub_ravi)
+    db.session.flush()
+    db.session.add(SubscriptionPayment(
+        subscription_id=sub_ravi.id, citizen_id=c3.id, amount=SUBSCRIPTION_FEE,
+        period_start=ravi_p1_start, period_end=ravi_p1_end,
+        status=PaymentStatus.PAID, method="card", transaction_ref=sub_txn(), paid_at=dt(19)))
+
+    # Arjun Singh — subscribed then cancelled; shows up as a churned member
+    # in admin's subscription list.
+    arjun_p1_start = dt(50).date()
+    arjun_p1_end = _add_month(arjun_p1_start)
+    sub_arjun = Subscription(citizen_id=c5.id, status=SubscriptionStatus.CANCELLED,
+                              started_at=dt(50), next_billing_date=arjun_p1_end, cancelled_at=dt(5))
+    db.session.add(sub_arjun)
+    db.session.flush()
+    db.session.add(SubscriptionPayment(
+        subscription_id=sub_arjun.id, citizen_id=c5.id, amount=SUBSCRIPTION_FEE,
+        period_start=arjun_p1_start, period_end=arjun_p1_end,
+        status=PaymentStatus.PAID, method="online", transaction_ref=sub_txn(), paid_at=dt(49)))
+
     db.session.commit()
     print("[SEED] Database seeded successfully with rich demo data!")

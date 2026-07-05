@@ -45,6 +45,11 @@
               <div class="stat-num">{{ satisfaction ? `${satisfaction.avg}/5` : '—' }}</div>
               <div class="stat-label">Citizen Satisfaction{{ satisfaction ? ` (${satisfaction.count})` : '' }}</div>
             </div>
+            <router-link to="/admin/subscriptions" class="stat-card stat-card-link">
+              <div class="stat-icon icon-purple">&#11088;</div>
+              <div class="stat-num">{{ stats.subscriptions?.active || 0 }}</div>
+              <div class="stat-label">Premium Subscribers · ₹{{ stats.subscriptions?.monthly_recurring_revenue || 0 }}/mo</div>
+            </router-link>
           </div>
 
           <!-- Status donut chart -->
@@ -287,6 +292,7 @@ onMounted(async () => {
 </script>
 
 <style scoped>
+.stat-card-link { text-decoration: none; cursor: pointer; }
 .chart-card { }
 .donut-row { display: flex; align-items: center; gap: 2rem; flex-wrap: wrap; }
 .donut-container { position: relative; width: 140px; height: 140px; flex-shrink: 0; }

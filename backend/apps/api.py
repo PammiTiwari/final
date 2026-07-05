@@ -9,11 +9,14 @@ from flask_jwt_extended import (
 )
 from werkzeug.utils import secure_filename
 from rapidfuzz import fuzz
+from sqlalchemy.exc import IntegrityError
 from . import db
-from .models import (now_ist, 
+from .models import (now_ist,
     User, ServiceRequest, Assignment, Facility, Booking, Payment, Notification,
     Post, PostComment, PostLike, ComplaintUpvote, Department,
-    Role, RequestStatus, Priority, BookingStatus, PaymentStatus, DEPT_MAP
+    Subscription, SubscriptionPayment,
+    Role, RequestStatus, Priority, BookingStatus, PaymentStatus, DEPT_MAP,
+    SubscriptionStatus, SUBSCRIPTION_FEE
 )
 
 import re
@@ -61,6 +64,27 @@ def _require_role(*roles):
     user = db.session.get(User, uid)
     if not user or user.role not in roles:
         return {"message": "Forbidden: insufficient role"}, 403
+    return None
+
+
+def _require_active_subscription(user):
+    """Citizen-only paywall: filing a new complaint or posting/commenting/liking
+    on the community feed requires an active AND paid-up Premium subscription —
+    an "active" status with an unpaid invoice still doesn't grant access; the
+    citizen must actually clear what they owe (matches how a real subscription
+    only unlocks once payment clears, not just on clicking "Subscribe"). Staff/
+    admin are never gated (they don't hold subscriptions). This only blocks
+    *new* activity — complaints and posts made while paid-up stay fully valid
+    and visible even after the subscription later lapses or is cancelled."""
+    if user.role != Role.CITIZEN:
+        return None
+    sub = Subscription.query.filter_by(citizen_id=user.id, status=SubscriptionStatus.ACTIVE).first()
+    if not sub:
+        return {"message": f"An active Cyber Panchayat Premium subscription (Rs.{SUBSCRIPTION_FEE:.0f}/month) is required for this action."}, 403
+    _sync_subscription_billing(sub)
+    due = SubscriptionPayment.query.filter_by(subscription_id=sub.id, status=PaymentStatus.PENDING).first()
+    if due:
+        return {"message": f"Your Premium subscription has an unpaid invoice of Rs.{due.amount:.0f} — please pay it to continue using this feature."}, 403
     return None
 
 
@@ -129,6 +153,59 @@ def _calculate_fee(facility, start_time, end_time):
     end_dt = datetime.combine(date.today(), end_time)
     hours = (end_dt - start_dt).seconds / 3600
     return round(facility.fee_per_hour * hours, 2)
+
+
+def _add_month(d):
+    """Calendar-month add with day-overflow clamped (Jan 31 -> Feb 28)."""
+    import calendar
+    if d.month == 12:
+        return d.replace(year=d.year + 1, month=1, day=min(d.day, 31))
+    last_day = calendar.monthrange(d.year, d.month + 1)[1]
+    return d.replace(month=d.month + 1, day=min(d.day, last_day))
+
+
+def _sync_subscription_billing(sub):
+    """Generates the pending invoice for each billing cycle as it comes due.
+    There's no payment-gateway webhook or cron job in this app, so a
+    subscription's billing state is brought up to date lazily, right before
+    it's read (on /subscriptions/me or the admin list) — the same wall-clock
+    date would produce the same result whether checked here or by a real
+    scheduler, it's just checked on-access instead of on-schedule."""
+    if sub.status != SubscriptionStatus.ACTIVE:
+        return
+    if sub.subscriber and not sub.subscriber.is_active:
+        # Account disabled by admin — don't keep generating invoices a citizen
+        # has no way to log in and pay; existing history is left untouched.
+        return
+    today = now_ist().date()
+
+    if sub.cancelled_at:
+        # Cancellation was requested while still paid up — access continues
+        # (status stays ACTIVE) through the period already paid for, with no
+        # further renewal invoice. Once that period actually ends, the
+        # subscription closes out for real instead of billing again.
+        if sub.next_billing_date <= today:
+            sub.status = SubscriptionStatus.CANCELLED
+            db.session.commit()
+        return
+
+    guard = 0
+    while sub.next_billing_date <= today and guard < 24:
+        period_start = sub.next_billing_date
+        period_end = _add_month(period_start)
+        exists = SubscriptionPayment.query.filter_by(
+            subscription_id=sub.id, period_start=period_start).first()
+        if not exists:
+            db.session.add(SubscriptionPayment(
+                subscription_id=sub.id, citizen_id=sub.citizen_id,
+                amount=SUBSCRIPTION_FEE, period_start=period_start, period_end=period_end,
+            ))
+            _notify(sub.citizen_id, "Subscription Payment Due",
+                    f"Your Cyber Panchayat Premium fee of Rs.{SUBSCRIPTION_FEE:.0f} for "
+                    f"{period_start.strftime('%b %Y')} is due.", "payment")
+        sub.next_billing_date = period_end
+        guard += 1
+    db.session.commit()
 
 
 # ── Auth ──────────────────────────────────────────────────────────────────────
@@ -245,6 +322,9 @@ class RequestListResource(Resource):
     def post(self):
         user = _current_user()
         err = _require_role(Role.CITIZEN)
+        if err:
+            return err
+        err = _require_active_subscription(user)
         if err:
             return err
 
@@ -1170,6 +1250,13 @@ class DashboardResource(Resource):
                         .filter_by(status=PaymentStatus.PAID).scalar() or 0,
                     "pending": Payment.query.filter_by(status=PaymentStatus.PENDING).count(),
                 },
+                "subscriptions": {
+                    "active": Subscription.query.filter_by(status=SubscriptionStatus.ACTIVE).count(),
+                    "monthly_recurring_revenue": Subscription.query.filter_by(
+                        status=SubscriptionStatus.ACTIVE).count() * SUBSCRIPTION_FEE,
+                    "total_collected": db.session.query(db.func.sum(SubscriptionPayment.amount))
+                        .filter_by(status=PaymentStatus.PAID).scalar() or 0,
+                },
                 "facilities": {
                     "total": Facility.query.count(),
                     "active": Facility.query.filter_by(is_active=True).count(),
@@ -1491,12 +1578,15 @@ class PostListResource(Resource):
             q = q.filter(Post.category != "announcement")
         if ward:
             q = q.filter_by(ward=ward)
-        posts = q.order_by(Post.created_at.desc()).limit(50).all()
+        posts = q.order_by(Post.created_at.desc()).all()
         return [p.to_dict(user.id) for p in posts], 200
 
     @jwt_required()
     def post(self):
         user = _current_user()
+        err = _require_active_subscription(user)
+        if err:
+            return err
         data = request.get_json() or {}
         content = (data.get("content") or "").strip()
         if not content:
@@ -1558,6 +1648,9 @@ class PostLikeResource(Resource):
     @jwt_required()
     def post(self, post_id):
         user = _current_user()
+        err = _require_active_subscription(user)
+        if err:
+            return err
         if not db.session.get(Post, post_id):
             return {"message": "Post not found"}, 404
         existing = PostLike.query.filter_by(post_id=post_id, user_id=user.id).first()
@@ -1580,6 +1673,9 @@ class PostCommentListResource(Resource):
     @jwt_required()
     def post(self, post_id):
         user = _current_user()
+        err = _require_active_subscription(user)
+        if err:
+            return err
         if not db.session.get(Post, post_id):
             return {"message": "Post not found"}, 404
         data = request.get_json() or {}
@@ -1800,6 +1896,237 @@ class BookingInvoiceResource(Resource):
         }
 
 
+# ── Subscriptions (Cyber Panchayat Premium — recurring monthly membership) ────
+# One Subscription row per citizen; one SubscriptionPayment per billing cycle.
+# There's no payment gateway or cron in this app, so each cycle's invoice is
+# generated lazily by _sync_subscription_billing() the next time the
+# subscription is read (see that function's docstring for why that's fine).
+
+class SubscriptionMeResource(Resource):
+    @jwt_required()
+    def get(self):
+        err = _require_role(Role.CITIZEN)
+        if err:
+            return err
+        user = _current_user()
+        sub = Subscription.query.filter_by(citizen_id=user.id).first()
+        if not sub:
+            return {"subscribed": False, "subscription": None, "due_payment": None, "monthly_fee": SUBSCRIPTION_FEE}, 200
+        _sync_subscription_billing(sub)
+        due = sub.payments.filter_by(status=PaymentStatus.PENDING) \
+            .order_by(SubscriptionPayment.period_start.asc()).first()
+        return {
+            "subscribed": sub.status == SubscriptionStatus.ACTIVE,
+            "subscription": sub.to_dict(),
+            "due_payment": due.to_dict() if due else None,
+            "monthly_fee": SUBSCRIPTION_FEE,
+        }, 200
+
+
+class SubscriptionSubscribeResource(Resource):
+    @jwt_required()
+    def post(self):
+        err = _require_role(Role.CITIZEN)
+        if err:
+            return err
+        user = _current_user()
+        sub = Subscription.query.filter_by(citizen_id=user.id).first()
+        if sub and sub.status == SubscriptionStatus.ACTIVE:
+            if sub.cancelled_at:
+                # Undo a pending cancellation — still within the period already
+                # paid for, so no new charge is needed, just resume auto-renewal.
+                sub.cancelled_at = None
+                db.session.commit()
+                return {"message": "Subscription resumed", "subscription": sub.to_dict()}, 200
+            return {"message": "You already have an active subscription"}, 400
+
+        today = now_ist().date()
+        period_end = _add_month(today)
+        if sub:
+            # started_at is deliberately left untouched on a resubscribe — it's
+            # the citizen's original join date, not reset every time they lapse
+            # and come back (otherwise "Member since" could show a date *after*
+            # an older paid invoice still sitting in their billing history).
+            sub.status = SubscriptionStatus.ACTIVE
+            sub.next_billing_date = period_end
+            sub.cancelled_at = None
+        else:
+            sub = Subscription(citizen_id=user.id, next_billing_date=period_end)
+            db.session.add(sub)
+            try:
+                db.session.flush()
+            except IntegrityError:
+                # A concurrent double-submit raced us to create this citizen's
+                # (unique) Subscription row first — treat it the same as the
+                # already-subscribed check above instead of a raw 500.
+                db.session.rollback()
+                return {"message": "You already have an active subscription"}, 400
+
+        # Guards a concurrent double-submit from creating two invoices for the same cycle.
+        payment = SubscriptionPayment.query.filter_by(subscription_id=sub.id, period_start=today).first()
+        if not payment:
+            payment = SubscriptionPayment(
+                subscription_id=sub.id, citizen_id=user.id, amount=SUBSCRIPTION_FEE,
+                period_start=today, period_end=period_end,
+            )
+            db.session.add(payment)
+
+        admins = User.query.filter_by(role=Role.ADMIN).all()
+        for admin in admins:
+            _notify(admin.id, "New Premium Subscriber",
+                    f"{user.name} subscribed to Cyber Panchayat Premium (Rs.{SUBSCRIPTION_FEE:.0f}/month).",
+                    "subscription")
+
+        db.session.commit()
+        return {"subscription": sub.to_dict(), "due_payment": payment.to_dict()}, 201
+
+
+class SubscriptionCancelResource(Resource):
+    @jwt_required()
+    def post(self):
+        err = _require_role(Role.CITIZEN)
+        if err:
+            return err
+        user = _current_user()
+        sub = Subscription.query.filter_by(citizen_id=user.id).first()
+        if not sub or sub.status != SubscriptionStatus.ACTIVE or sub.cancelled_at:
+            return {"message": "You don't have an active subscription"}, 400
+
+        due = SubscriptionPayment.query.filter_by(subscription_id=sub.id, status=PaymentStatus.PENDING).first()
+        if due:
+            # Nothing paid for the cycle in progress — there's no "already paid
+            # for" time to honor, so cancellation ends access immediately. The
+            # unpaid invoice is waived rather than left dangling (it also
+            # prevents a later resubscribe from creating a second, overlapping
+            # invoice on top of one that was never resolved).
+            SubscriptionPayment.query.filter_by(
+                subscription_id=sub.id, status=PaymentStatus.PENDING).delete(synchronize_session=False)
+            sub.status = SubscriptionStatus.CANCELLED
+            sub.cancelled_at = now_ist()
+            db.session.commit()
+            return {"message": "Subscription cancelled", "subscription": sub.to_dict()}, 200
+
+        # Fully paid up — keep access (and stay ACTIVE) through the period
+        # already paid for; only stop auto-renewing. _sync_subscription_billing
+        # flips status to CANCELLED for real once next_billing_date passes.
+        sub.cancelled_at = now_ist()
+        db.session.commit()
+        return {
+            "message": f"Subscription will stay active until {sub.next_billing_date.isoformat()}, then it won't renew.",
+            "subscription": sub.to_dict(),
+        }, 200
+
+
+class SubscriptionPaymentsListResource(Resource):
+    @jwt_required()
+    def get(self):
+        err = _require_role(Role.CITIZEN)
+        if err:
+            return err
+        user = _current_user()
+        sub = Subscription.query.filter_by(citizen_id=user.id).first()
+        if not sub:
+            return [], 200
+        _sync_subscription_billing(sub)
+        payments = sub.payments.order_by(SubscriptionPayment.period_start.desc()).all()
+        return [p.to_dict() for p in payments], 200
+
+
+class SubscriptionPayResource(Resource):
+    @jwt_required()
+    def post(self, payment_id):
+        user = _current_user()
+        payment = db.session.get(SubscriptionPayment, payment_id)
+        if not payment:
+            return {"message": "Not found"}, 404
+        if payment.citizen_id != user.id:
+            return {"message": "Forbidden"}, 403
+        if payment.status != PaymentStatus.PENDING:
+            return {"message": f"Payment is already {payment.status}"}, 400
+
+        data = request.get_json() or {}
+        method = data.get("method", "online")
+        if method not in ["online", "upi", "card", "netbanking"]:
+            return {"message": "Invalid payment method"}, 400
+
+        today = now_ist().date()
+        sub = payment.subscription
+        # Paid late — if this is the subscription's current (frontier) cycle,
+        # not an older backlogged one, shift it to start today so the citizen
+        # gets a genuine full month of access from the day they actually pay,
+        # instead of losing the days they spent blocked while it sat unpaid.
+        if today > payment.period_start and sub and sub.next_billing_date == payment.period_end:
+            payment.period_start = today
+            payment.period_end = _add_month(today)
+            sub.next_billing_date = payment.period_end
+
+        payment.status = PaymentStatus.PAID
+        payment.method = method
+        payment.transaction_ref = f"SUB-TXN-{uuid.uuid4().hex[:10].upper()}"
+        payment.paid_at = now_ist()
+        db.session.commit()
+
+        _notify(user.id, "Subscription Payment Received",
+                f"Rs.{payment.amount:.0f} received — your access now runs through "
+                f"{payment.period_end.strftime('%d %b %Y')}. Thank you for being a Premium member!", "payment")
+        return payment.to_dict(), 200
+
+
+class SubscriptionInvoiceResource(Resource):
+    @jwt_required()
+    def get(self, payment_id):
+        user = _current_user()
+        payment = db.session.get(SubscriptionPayment, payment_id)
+        if not payment:
+            return {"message": "Not found"}, 404
+        if user.role == Role.STAFF:
+            return {"message": "Access denied"}, 403
+        if user.role == Role.CITIZEN and payment.citizen_id != user.id:
+            return {"message": "Access denied"}, 403
+
+        return {
+            "invoice_number": f"SUB-INV-{payment.id:05d}",
+            "payment_id": payment.id,
+            "citizen_name": payment.payer.name if payment.payer else "",
+            "citizen_email": payment.payer.email if payment.payer else "",
+            "plan": "Cyber Panchayat Premium Membership",
+            "period_start": payment.period_start.isoformat(),
+            "period_end": payment.period_end.isoformat(),
+            "amount": payment.amount,
+            "status": payment.status,
+            "method": payment.method,
+            "transaction_ref": payment.transaction_ref,
+            "paid_at": payment.paid_at.isoformat() + "+05:30" if payment.paid_at else None,
+            "issued_at": now_ist().strftime("%d %b %Y, %I:%M %p"),
+        }, 200
+
+
+class SubscriptionListResource(Resource):
+    """Admin visibility: every citizen's subscription status + revenue stats."""
+    @jwt_required()
+    def get(self):
+        err = _require_role(Role.ADMIN)
+        if err:
+            return err
+        subs = Subscription.query.order_by(Subscription.started_at.desc()).all()
+        for sub in subs:
+            _sync_subscription_billing(sub)
+        active_count = sum(1 for s in subs if s.status == SubscriptionStatus.ACTIVE)
+        total_collected = db.session.query(db.func.sum(SubscriptionPayment.amount)) \
+            .filter_by(status=PaymentStatus.PAID).scalar() or 0
+        pending_count = SubscriptionPayment.query.filter_by(status=PaymentStatus.PENDING).count()
+        return {
+            "subscriptions": [s.to_dict() for s in subs],
+            "stats": {
+                "active": active_count,
+                "cancelled": len(subs) - active_count,
+                "monthly_recurring_revenue": active_count * SUBSCRIPTION_FEE,
+                "total_collected": total_collected,
+                "pending_payments": pending_count,
+            },
+        }, 200
+
+
 # ── Register all resources ────────────────────────────────────────────────────
 
 def register_resources(api):
@@ -1834,6 +2161,15 @@ def register_resources(api):
     # Payments
     api.add_resource(PaymentListResource, "/payments")
     api.add_resource(PaymentPayResource, "/payments/<int:payment_id>/pay")
+
+    # Subscriptions (Cyber Panchayat Premium)
+    api.add_resource(SubscriptionMeResource, "/subscriptions/me")
+    api.add_resource(SubscriptionSubscribeResource, "/subscriptions/subscribe")
+    api.add_resource(SubscriptionCancelResource, "/subscriptions/cancel")
+    api.add_resource(SubscriptionPaymentsListResource, "/subscriptions/payments")
+    api.add_resource(SubscriptionPayResource, "/subscriptions/payments/<int:payment_id>/pay")
+    api.add_resource(SubscriptionInvoiceResource, "/subscriptions/payments/<int:payment_id>/invoice")
+    api.add_resource(SubscriptionListResource, "/admin/subscriptions")
 
     # Notifications
     api.add_resource(NotificationListResource, "/notifications")

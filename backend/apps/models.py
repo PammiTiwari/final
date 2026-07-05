@@ -63,6 +63,12 @@ class PaymentStatus:
     REFUNDED = "refunded"
     FAILED = "failed"
 
+class SubscriptionStatus:
+    ACTIVE = "active"
+    CANCELLED = "cancelled"
+
+SUBSCRIPTION_FEE = 100.0  # Rs./month — flat, no GST (a membership fee, not a facility booking)
+
 DEPT_MAP = {
     "road": "Road Maintenance",
     "electricity": "Electricity Department",
@@ -366,6 +372,75 @@ class Payment(db.Model):
             "citizen_id": self.citizen_id,
             "citizen_name": self.payer.name if self.payer else None,
             "amount": self.amount, "status": self.status, "method": self.method,
+            "transaction_ref": self.transaction_ref,
+            "created_at": self.created_at.isoformat() + "+05:30",
+            "paid_at": self.paid_at.isoformat() + "+05:30" if self.paid_at else None,
+        }
+
+
+class Subscription(db.Model):
+    """One row per citizen — the recurring membership itself. Actual money
+    changes hands via SubscriptionPayment, one per billing cycle (like a
+    Booking having many months instead of just one)."""
+    __tablename__ = "subscriptions"
+    id = db.Column(db.Integer, primary_key=True)
+    citizen_id = db.Column(db.Integer, db.ForeignKey("users.id"), unique=True, nullable=False)
+    status = db.Column(db.String(20), nullable=False, default=SubscriptionStatus.ACTIVE)
+    started_at = db.Column(db.DateTime, default=now_ist, nullable=False)
+    next_billing_date = db.Column(db.Date, nullable=False)
+    cancelled_at = db.Column(db.DateTime)
+    subscriber = db.relationship("User", foreign_keys=[citizen_id])
+    payments = db.relationship("SubscriptionPayment", backref="subscription",
+                                lazy="dynamic", cascade="all, delete-orphan",
+                                order_by="SubscriptionPayment.id.desc()")
+
+    def to_dict(self):
+        latest = self.payments.first()
+        return {
+            "id": self.id,
+            "citizen_id": self.citizen_id,
+            "citizen_name": self.subscriber.name if self.subscriber else None,
+            "citizen_email": self.subscriber.email if self.subscriber else None,
+            "status": self.status,
+            "monthly_fee": SUBSCRIPTION_FEE,
+            "started_at": self.started_at.isoformat() + "+05:30",
+            "next_billing_date": self.next_billing_date.isoformat(),
+            "cancelled_at": self.cancelled_at.isoformat() + "+05:30" if self.cancelled_at else None,
+            # True while a cancelled-but-still-paid-up member keeps access through
+            # the period they already paid for — status only flips to CANCELLED
+            # for real once that period ends (see _sync_subscription_billing).
+            "pending_cancellation": bool(self.cancelled_at and self.status == SubscriptionStatus.ACTIVE),
+            "latest_payment_status": latest.status if latest else None,
+        }
+
+
+class SubscriptionPayment(db.Model):
+    """One invoice-able charge for a single billing cycle of a Subscription."""
+    __tablename__ = "subscription_payments"
+    id = db.Column(db.Integer, primary_key=True)
+    subscription_id = db.Column(db.Integer, db.ForeignKey("subscriptions.id"), nullable=False)
+    citizen_id = db.Column(db.Integer, db.ForeignKey("users.id"), nullable=False)
+    amount = db.Column(db.Float, nullable=False, default=SUBSCRIPTION_FEE)
+    period_start = db.Column(db.Date, nullable=False)
+    period_end = db.Column(db.Date, nullable=False)
+    status = db.Column(db.String(20), nullable=False, default=PaymentStatus.PENDING)
+    method = db.Column(db.String(50))
+    transaction_ref = db.Column(db.String(100), unique=True)
+    created_at = db.Column(db.DateTime, default=now_ist, nullable=False)
+    paid_at = db.Column(db.DateTime)
+    payer = db.relationship("User", foreign_keys=[citizen_id])
+
+    def to_dict(self):
+        return {
+            "id": self.id,
+            "subscription_id": self.subscription_id,
+            "citizen_id": self.citizen_id,
+            "citizen_name": self.payer.name if self.payer else None,
+            "amount": self.amount,
+            "period_start": self.period_start.isoformat(),
+            "period_end": self.period_end.isoformat(),
+            "status": self.status,
+            "method": self.method,
             "transaction_ref": self.transaction_ref,
             "created_at": self.created_at.isoformat() + "+05:30",
             "paid_at": self.paid_at.isoformat() + "+05:30" if self.paid_at else None,
