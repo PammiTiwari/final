@@ -48,3 +48,4 @@ const photos = computed(() => props.images || [])
 .image-gallery.count-3 { grid-template-columns: repeat(3, 1fr); }
 .image-gallery.count-3 img { aspect-ratio: 1 / 1; }
 </style>
+
