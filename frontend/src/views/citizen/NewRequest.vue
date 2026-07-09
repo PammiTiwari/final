@@ -27,8 +27,14 @@
         </div>
 
         <div v-else class="form-container card">
+          <FormProgressBar
+            :steps="['Details', 'Category', 'Photos', 'Review', 'Submit']"
+            :currentStep="formStep"
+            @step-click="handleStepClick"
+          />
+
           <div v-if="success" class="alert alert-success">
-            Complaint submitted successfully! ID: <strong>{{ submittedId }}</strong>
+            ✓ Complaint submitted successfully! ID: <strong>{{ submittedId }}</strong>
             <router-link to="/complaints" class="ml-3 underline">View all complaints</router-link>
           </div>
           <div v-if="error" class="alert alert-error">{{ error }}</div>
@@ -137,20 +143,31 @@
 </template>
 
 <script setup>
+/**
+ * New Request (Submit Complaint) - Citizen form to file new complaints
+ * IMPORTANT: Requires active Premium subscription with no overdue payments
+ * Features: AI category suggestion, paper scanning with OCR, duplicate detection, image upload, location picking
+ */
 import { ref, onMounted } from 'vue'
+import { useRouter } from 'vue-router'
 import AppSidebar from '../../components/AppSidebar.vue'
 import AppTopbar from '../../components/AppTopbar.vue'
+import FormProgressBar from '../../components/FormProgressBar.vue'
 import LocationPicker from '../../components/LocationPicker.vue'
 import SimilarComplaints from '../../components/SimilarComplaints.vue'
 import MultiImageUpload from '../../components/MultiImageUpload.vue'
 import { useAuthStore } from '../../stores/auth'
+import { useToast } from '../../composables/useToast'
 import api from '../../api'
 
 const auth = useAuthStore()
+const router = useRouter()
+const { success: toastSuccess, error: toastError } = useToast()
 const checkingSub = ref(true)
-const subscribed = ref(false)
-const hasDue = ref(false)
+const subscribed = ref(false) // Premium subscription active
+const hasDue = ref(false) // Payment overdue
 const dueAmount = ref(0)
+const formStep = ref(0) // Track form progress step
 
 onMounted(async () => {
   try {
@@ -190,6 +207,11 @@ const scanError = ref(false)
 
 const wards = ['Ward-1', 'Ward-2', 'Ward-3', 'Central']
 
+/**
+ * OCR extraction from paper complaint photo
+ * Uses AI to extract category, title, description, address, priority, and attach image
+ * User must review extracted data before submission for accuracy
+ */
 async function handleScanPaper(e) {
   const file = e.target.files[0]
   if (!file) return
@@ -200,14 +222,15 @@ async function handleScanPaper(e) {
     const fd = new FormData()
     fd.append('file', file)
     const res = await api.post('/ai/extract-from-image', fd, { headers: { 'Content-Type': 'multipart/form-data' } })
+    // Auto-fill form fields from extracted data
     form.value.category = res.data.category
     if (res.data.title) form.value.title = res.data.title
     form.value.description = res.data.description
     if (res.data.address) form.value.address = res.data.address
     form.value.priority = res.data.priority
-    if (res.data.image_url && !form.value.image_urls.includes(res.data.image_url) && form.value.image_urls.length < 3) {
-      form.value.image_urls.push(res.data.image_url)
-    }
+    // The scanned photo is only read for its text (OCR) — it's a picture of a
+    // written complaint, not evidence of the actual issue, so it must not be
+    // silently added to the complaint's Upload Photos.
     scanMessage.value = 'Read the paper and filled the form below — please check it over before submitting. Add a photo of the actual problem separately if you have one.'
   } catch (err) {
     scanError.value = true
@@ -224,6 +247,11 @@ function onLocated({ lat, lng, address }) {
   if (address && !form.value.address) form.value.address = address
 }
 
+/**
+ * AI category suggestion based on complaint description
+ * Uses NLP to classify into predefined categories (road, water, electricity, etc.)
+ * Returns confidence level to indicate reliability of suggestion
+ */
 async function suggestCategory() {
   if (!form.value.description.trim()) return
   aiLoading.value = true
@@ -239,6 +267,11 @@ async function suggestCategory() {
   }
 }
 
+/**
+ * Validate form and check for duplicate complaints
+ * If similar complaints found: show SimilarComplaints panel with option to upvote instead
+ * If no duplicates: proceed directly to submission
+ */
 async function handleSubmit() {
   if (loading.value) return
   error.value = ''
@@ -254,7 +287,7 @@ async function handleSubmit() {
       latitude: form.value.latitude, longitude: form.value.longitude,
     })
     if (data.length) {
-      similar.value = data
+      similar.value = data // Show similar complaints for user review
       return
     }
   } catch { /* non-blocking: fall through to submit */ }
@@ -262,17 +295,25 @@ async function handleSubmit() {
   doSubmit()
 }
 
+/**
+ * Submit new complaint to backend
+ * Returns complaint ID (cmp_id) and displays success message
+ * User can then view all complaints or submit another
+ */
 async function doSubmit() {
   if (loading.value) return
-  similar.value = []
+  similar.value = [] // Clear similar complaints list
   error.value = ''
   loading.value = true
   try {
+    formStep.value = 4 // Update to final step
     const res = await api.post('/requests', form.value)
     submittedId.value = res.data.cmp_id
-    success.value = true
+    success.value = true // Display success message with complaint ID
+    toastSuccess(`✓ Complaint submitted successfully! ID: ${res.data.cmp_id}`)
   } catch (e) {
     error.value = e.response?.data?.message || 'Failed to submit complaint'
+    toastError(`Error: ${error.value}`)
   } finally {
     loading.value = false
   }
@@ -280,6 +321,12 @@ async function doSubmit() {
 
 function onUpvoted(item) {
   upvotedMsg.value = `Thanks! We added your support to ${item.cmp_id} instead of creating a duplicate.`
+}
+
+function handleStepClick(step) {
+  if (step < formStep.value) {
+    formStep.value = step
+  }
 }
 </script>
 
