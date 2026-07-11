@@ -84,7 +84,7 @@ const citizenNav = [
   { type: 'group', label: 'Complaints', items: [
     { label: 'Submit Complaint', path: '/submit' },
     { label: 'My Complaints',    path: '/complaints' },
-    { label: 'Track Complaint',  path: '/track' },
+    { label: 'Track Complaint',  path: '/complaints/track' },
   ]},
   { type: 'group', label: 'Facilities', items: [
     { label: 'Book Facility', path: '/facilities' },

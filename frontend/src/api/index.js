@@ -175,7 +175,7 @@ async function handle(method, url, body) {
       throw { response: { status: 409, data: { message: "Email already registered" } } }
     }
     const nextId = Math.max(...Object.values(USERS).map(u => u.id)) + 1
-    const newUser = { id: nextId, name, email, role: "citizen", ward: body.ward || "Ward-1", phone: body.phone || "", address: body.address || null, is_active: true, created_at: new Date().toISOString() }
+    const newUser = { id: nextId, name, email, role: "citizen", ward: body.ward || "Ward-1", phone: body.phone || "", is_active: true, created_at: new Date().toISOString() }
     USERS[email] = newUser
     const token = `mock-jwt-citizen-${nextId}`
     localStorage.setItem("civic_token", token)
@@ -185,9 +185,6 @@ async function handle(method, url, body) {
   if (M === "GET"  && path === "/auth/me") {
     if (!user) throw { response: { status: 401, data: {} } }
     return { data: user }
-  }
-  if (M === "POST" && path === "/auth/forgot-password") {
-    return { data: { message: "If that email exists, a reset link has been sent." } }
   }
 
   // Dashboard (returns different shape per role)
@@ -365,11 +362,14 @@ async function handle(method, url, body) {
   }
   if (M === "GET" && path === "/public-stats") {
     const inProgressStatuses = ["assigned", "reassigned", "in_progress", "reopened", "on_hold_weather"]
+    const admin = Object.values(USERS).find(u => u.role === "admin")
     return { data: {
       total_complaints: REQUESTS.length,
       resolved: REQUESTS.filter(r => ["resolved", "closed"].includes(r.status)).length,
       in_progress: REQUESTS.filter(r => inProgressStatuses.includes(r.status)).length,
       departments: DEPARTMENTS.length,
+      admin_email: admin?.email || null,
+      admin_phone: admin?.phone || null,
     } }
   }
 

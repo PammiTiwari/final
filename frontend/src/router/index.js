@@ -21,6 +21,7 @@ const routes = [
   { path: "/dashboard", name: "citizen-dashboard", component: () => import("../views/citizen/CitizenDashboard.vue"), meta: { roles: ["citizen"] } },
   { path: "/submit", name: "new-request", component: () => import("../views/citizen/NewRequest.vue"), meta: { roles: ["citizen"] } },
   { path: "/complaints", name: "my-requests", component: () => import("../views/citizen/MyRequests.vue"), meta: { roles: ["citizen"] } },
+  { path: "/complaints/track", name: "track-citizen", component: () => import("../views/citizen/TrackComplaint.vue"), meta: { roles: ["citizen"] } },
   { path: "/complaints/:id", name: "complaint-detail", component: () => import("../views/citizen/ComplaintDetail.vue"), meta: { roles: ["citizen"] } },
 
   // Legacy citizen route paths

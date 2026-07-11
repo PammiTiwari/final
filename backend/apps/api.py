@@ -275,7 +275,7 @@ class MeResource(Resource):
             return {"message": "Please enter a valid name — letters only, numbers are not a name"}, 400
         if data.get("phone") and not PHONE_RE.match(data["phone"].strip()):
             return {"message": "Phone must be a valid 10-digit mobile number"}, 400
-        for field in ["name", "phone", "address", "ward"]:
+        for field in ["name", "phone", "ward"]:
             if field in data:
                 setattr(user, field, data[field].strip() if isinstance(data[field], str) else data[field])
         db.session.commit()
@@ -1487,6 +1487,7 @@ class PublicStatsResource(Resource):
     """Aggregate counts only (no PII, no per-complaint detail) for the
     logged-out landing page's stats section."""
     def get(self):
+        admin = User.query.filter_by(role=Role.ADMIN).first()
         return {
             "total_complaints": ServiceRequest.query.count(),
             "resolved": ServiceRequest.query.filter(ServiceRequest.status.in_(
@@ -1495,6 +1496,8 @@ class PublicStatsResource(Resource):
                 [RequestStatus.ASSIGNED, RequestStatus.REASSIGNED, RequestStatus.IN_PROGRESS,
                  RequestStatus.REOPENED, RequestStatus.ON_HOLD_WEATHER])).count(),
             "departments": Department.query.count(),
+            "admin_email": admin.email if admin else None,
+            "admin_phone": admin.phone if admin else None,
         }, 200
 
 

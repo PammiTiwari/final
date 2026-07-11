@@ -89,23 +89,23 @@ def _seed_data():
     #   Ward-3: Civil Lines Road, Nehru Chowk, Library Road, Nehru Colony
     #   Central: Civic Center, Central Park
     c1 = User(name="Amit Sharma", email="amit@gmail.com", role=Role.CITIZEN,
-              phone="9111111101", address="12, MG Road, Preetam Nagar (Ward-1)", ward="Ward-1", created_at=dt(45))
+              phone="9111111101", ward="Ward-1", created_at=dt(45))
     c1.set_password("Citizen@123")
 
     c2 = User(name="Neha Verma", email="neha@gmail.com", role=Role.CITIZEN,
-              phone="9111111102", address="45, Park Street, Preetam Nagar (Ward-2)", ward="Ward-2", created_at=dt(40))
+              phone="9111111102", ward="Ward-2", created_at=dt(40))
     c2.set_password("Citizen@123")
 
     c3 = User(name="Ravi Gupta", email="ravi.g@gmail.com", role=Role.CITIZEN,
-              phone="9111111103", address="78, Civil Lines Road, Preetam Nagar (Ward-3)", ward="Ward-3", created_at=dt(35))
+              phone="9111111103", ward="Ward-3", created_at=dt(35))
     c3.set_password("Citizen@123")
 
     c4 = User(name="Sunita Mehta", email="sunita@gmail.com", role=Role.CITIZEN,
-              phone="9111111104", address="23, Green Avenue, Preetam Nagar (Ward-2)", ward="Ward-2", created_at=dt(30))
+              phone="9111111104", ward="Ward-2", created_at=dt(30))
     c4.set_password("Citizen@123")
 
     c5 = User(name="Arjun Singh", email="arjun@gmail.com", role=Role.CITIZEN,
-              phone="9111111105", address="56, Nehru Colony, Preetam Nagar (Ward-3)", ward="Ward-3", created_at=dt(25))
+              phone="9111111105", ward="Ward-3", created_at=dt(25))
     c5.set_password("Citizen@123")
 
     db.session.add_all([admin, o1, o2, o3, o4, o5, c1, c2, c3, c4, c5])

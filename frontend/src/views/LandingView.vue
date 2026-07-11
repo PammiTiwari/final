@@ -116,6 +116,30 @@
       </div>
     </section>
 
+    <!-- Contact -->
+    <section class="land-contact" id="contact">
+      <div class="section-container">
+        <h2 class="section-title-lg">Contact Us</h2>
+        <p class="section-sub">Have a question or need help? Reach out to the admin office.</p>
+        <div class="contact-grid">
+          <a v-if="stats.admin_email" :href="`mailto:${stats.admin_email}`" class="contact-card">
+            <span class="contact-icon">✉️</span>
+            <div>
+              <div class="contact-label">Email</div>
+              <div class="contact-value">{{ stats.admin_email }}</div>
+            </div>
+          </a>
+          <a v-if="stats.admin_phone" :href="`tel:+91${stats.admin_phone}`" class="contact-card">
+            <span class="contact-icon">📞</span>
+            <div>
+              <div class="contact-label">Phone</div>
+              <div class="contact-value">{{ fmtPhone(stats.admin_phone) }}</div>
+            </div>
+          </a>
+        </div>
+      </div>
+    </section>
+
     <!-- Stats -->
     <section class="land-stats">
       <div class="stats-container">
@@ -156,6 +180,10 @@ const stats = ref({})
 
 function fmtNum(n) {
   return typeof n === 'number' ? n.toLocaleString('en-IN') : '—'
+}
+
+function fmtPhone(p) {
+  return p && p.length === 10 ? `+91 ${p.slice(0, 5)} ${p.slice(5)}` : p
 }
 
 onMounted(() => {
@@ -276,6 +304,24 @@ onMounted(() => {
 .stat-big { font-family: var(--font-heading); font-size: 2.2rem; font-weight: 400; color: #fff; }
 .stat-lbl { font-family: var(--font-mono); font-size: 0.7rem; letter-spacing: 0.1em; text-transform: uppercase; color: var(--accent-secondary); font-weight: 500; margin-top: 0.35rem; }
 .stat-divider { width: 1px; height: 50px; background: rgba(255,255,255,0.12); flex-shrink: 0; }
+
+/* Contact */
+.land-contact { padding: 5rem 3rem; background: var(--bg); }
+.contact-grid { display: flex; justify-content: center; gap: 1.5rem; flex-wrap: wrap; }
+.contact-card {
+  display: flex; align-items: center; gap: 0.9rem;
+  padding: 1.25rem 1.75rem; min-width: 260px;
+  background: var(--card); border: 1px solid var(--border); border-radius: var(--radius-lg);
+  transition: var(--transition);
+}
+.contact-card:hover { border-color: rgba(0,82,255,0.25); box-shadow: var(--shadow-hover); transform: translateY(-2px); }
+.contact-icon {
+  width: 42px; height: 42px; flex-shrink: 0;
+  background: var(--accent); border-radius: var(--radius-sm);
+  display: flex; align-items: center; justify-content: center; font-size: 1.2rem;
+}
+.contact-label { font-size: 0.72rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.06em; color: var(--text-muted); }
+.contact-value { font-size: 0.95rem; font-weight: 600; color: var(--text); margin-top: 0.15rem; }
 
 /* Footer */
 .land-footer { padding: 1.5rem 3rem; background: var(--card); text-align: center; color: var(--text-muted); font-size: 0.85rem; border-top: 1px solid var(--border); }

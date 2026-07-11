@@ -14,57 +14,57 @@ export const USERS = {
   "admin@civic.gov": {
     id: 1, name: "Preetam Nagar Admin", email: "admin@civic.gov",
     role: "admin", phone: "9000000001", ward: "Central", department: "Administration",
-    address: null, is_active: true, created_at: daysAgo(60),
+    is_active: true, created_at: daysAgo(60),
   },
   "rajesh@civic.gov": {
     id: 2, name: "Rajesh Kumar", email: "rajesh@civic.gov",
     role: "staff", phone: "9876543210", department: "Road Maintenance",
-    address: null, is_active: true, created_at: daysAgo(60),
+    is_active: true, created_at: daysAgo(60),
   },
   "priya@civic.gov": {
     id: 3, name: "Priya Singh", email: "priya@civic.gov",
     role: "staff", phone: "9876543212", department: "Electricity Department",
-    address: null, is_active: true, created_at: daysAgo(60),
+    is_active: true, created_at: daysAgo(60),
   },
   "imran@civic.gov": {
     id: 4, name: "Imran Khan", email: "imran@civic.gov",
     role: "staff", phone: "9876543213", department: "Water Supply Department",
-    address: null, is_active: true, created_at: daysAgo(60),
+    is_active: true, created_at: daysAgo(60),
   },
   "sandeep@civic.gov": {
     id: 5, name: "Sandeep Yadav", email: "sandeep@civic.gov",
     role: "staff", phone: "9876543214", department: "Sanitation Department",
-    address: null, is_active: true, created_at: daysAgo(60),
+    is_active: true, created_at: daysAgo(60),
   },
   "kavita@civic.gov": {
     id: 6, name: "Kavita Sharma", email: "kavita@civic.gov",
     role: "staff", phone: "9876543215", department: "Parks & Public Spaces",
-    address: null, is_active: true, created_at: daysAgo(60),
+    is_active: true, created_at: daysAgo(60),
   },
   "amit@gmail.com": {
     id: 7, name: "Amit Sharma", email: "amit@gmail.com",
     role: "citizen", phone: "9111111101", ward: "Ward-1",
-    address: "12, MG Road, Preetam Nagar (Ward-1)", is_active: true, created_at: daysAgo(45),
+    is_active: true, created_at: daysAgo(45),
   },
   "neha@gmail.com": {
     id: 8, name: "Neha Verma", email: "neha@gmail.com",
     role: "citizen", phone: "9111111102", ward: "Ward-2",
-    address: "45, Park Street, Preetam Nagar (Ward-2)", is_active: true, created_at: daysAgo(40),
+    is_active: true, created_at: daysAgo(40),
   },
   "ravi.g@gmail.com": {
     id: 9, name: "Ravi Gupta", email: "ravi.g@gmail.com",
     role: "citizen", phone: "9111111103", ward: "Ward-3",
-    address: "78, Civil Lines Road, Preetam Nagar (Ward-3)", is_active: true, created_at: daysAgo(35),
+    is_active: true, created_at: daysAgo(35),
   },
   "sunita@gmail.com": {
     id: 10, name: "Sunita Mehta", email: "sunita@gmail.com",
     role: "citizen", phone: "9111111104", ward: "Ward-2",
-    address: "23, Green Avenue, Preetam Nagar (Ward-2)", is_active: true, created_at: daysAgo(30),
+    is_active: true, created_at: daysAgo(30),
   },
   "arjun@gmail.com": {
     id: 11, name: "Arjun Singh", email: "arjun@gmail.com",
     role: "citizen", phone: "9111111105", ward: "Ward-3",
-    address: "56, Nehru Colony, Preetam Nagar (Ward-3)", is_active: true, created_at: daysAgo(25),
+    is_active: true, created_at: daysAgo(25),
   },
 }
 

@@ -26,6 +26,13 @@
           <input v-model="form.phone" type="tel" class="form-control" placeholder="Enter 10-digit phone number" required />
         </div>
         <div class="form-group">
+          <label>Ward</label>
+          <select v-model="form.ward" class="form-control" required>
+            <option value="" disabled>Select your ward</option>
+            <option v-for="w in wards" :key="w" :value="w">{{ w }}</option>
+          </select>
+        </div>
+        <div class="form-group">
           <label>Password</label>
           <div class="input-group">
             <input
@@ -61,11 +68,12 @@ import { useAuthStore } from '../stores/auth'
 const auth = useAuthStore()
 const router = useRouter()
 
-const form = ref({ name: '', email: '', phone: '', password: '' })
+const form = ref({ name: '', email: '', phone: '', ward: '', password: '' })
 const showPass = ref(false)
 const loading = ref(false)
 const error = ref('')
 const success = ref('')
+const wards = ['Ward-1', 'Ward-2', 'Ward-3']
 
 async function handleRegister() {
   error.value = ''
@@ -81,6 +89,10 @@ async function handleRegister() {
     error.value = 'Please enter a valid 10-digit phone number'
     return
   }
+  if (!form.value.ward) {
+    error.value = 'Please select your ward'
+    return
+  }
   if (form.value.password.length < 6) {
     error.value = 'Password must be at least 6 characters'
     return
@@ -91,6 +103,7 @@ async function handleRegister() {
       name,
       email: form.value.email.trim(),
       phone,
+      ward: form.value.ward,
       password: form.value.password,
     })
     router.push('/dashboard')
