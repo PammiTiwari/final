@@ -37,7 +37,6 @@
             <input type="checkbox" v-model="rememberMe" />
             <span>Remember Me</span>
           </label>
-          <router-link to="/forgot-password" class="forgot-link">Forgot Password?</router-link>
         </div>
 
         <button type="submit" class="btn btn-primary btn-full" :disabled="loading">
@@ -169,8 +168,6 @@ async function handleLogin() {
   display: flex; align-items: center; gap: 0.4rem;
   font-size: 0.8rem; color: var(--text-muted); cursor: pointer;
 }
-.forgot-link { font-size: 0.8rem; font-weight: 600; color: var(--primary); text-decoration: underline; }
-
 .btn-full { width: 100%; justify-content: center; padding: 0.65rem; font-size: 0.9rem; }
 
 .auth-switch {

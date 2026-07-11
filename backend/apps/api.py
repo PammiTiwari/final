@@ -232,7 +232,6 @@ class RegisterResource(Resource):
             email=data["email"].lower().strip(),
             role=Role.CITIZEN,
             phone=data.get("phone", ""),
-            address=data.get("address", ""),
             ward=data.get("ward", ""),
         )
         user.set_password(data["password"])

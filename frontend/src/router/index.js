@@ -6,7 +6,6 @@ const routes = [
   { path: "/", name: "home", component: () => import("../views/LandingView.vue"), meta: { public: true } },
   { path: "/login", name: "login", component: () => import("../views/LoginView.vue"), meta: { public: true } },
   { path: "/register", name: "register", component: () => import("../views/RegisterView.vue"), meta: { public: true } },
-  { path: "/forgot-password", name: "forgot-password", component: () => import("../views/ForgotPasswordView.vue"), meta: { public: true } },
   { path: "/track", name: "track-public", component: () => import("../views/citizen/TrackComplaint.vue"), meta: { public: true } },
 
   // Shared (all authenticated roles)

@@ -22,6 +22,10 @@
           <input v-model="form.email" type="email" class="form-control" placeholder="Enter email" required />
         </div>
         <div class="form-group">
+          <label>Phone Number</label>
+          <input v-model="form.phone" type="tel" class="form-control" placeholder="Enter 10-digit phone number" required />
+        </div>
+        <div class="form-group">
           <label>Password</label>
           <div class="input-group">
             <input
@@ -57,7 +61,7 @@ import { useAuthStore } from '../stores/auth'
 const auth = useAuthStore()
 const router = useRouter()
 
-const form = ref({ name: '', email: '', password: '' })
+const form = ref({ name: '', email: '', phone: '', password: '' })
 const showPass = ref(false)
 const loading = ref(false)
 const error = ref('')
@@ -71,6 +75,12 @@ async function handleRegister() {
     error.value = 'Please enter a valid name — letters only, numbers are not a name'
     return
   }
+  // Validate phone: exactly 10 digits
+  const phone = form.value.phone.trim()
+  if (!/^[0-9]{10}$/.test(phone)) {
+    error.value = 'Please enter a valid 10-digit phone number'
+    return
+  }
   if (form.value.password.length < 6) {
     error.value = 'Password must be at least 6 characters'
     return
@@ -80,6 +90,7 @@ async function handleRegister() {
     await auth.register({
       name,
       email: form.value.email.trim(),
+      phone,
       password: form.value.password,
     })
     router.push('/dashboard')

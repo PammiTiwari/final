@@ -10,8 +10,47 @@
 
         <div v-if="loading" class="spinner"></div>
         <div v-else>
-          <div class="facilities-grid">
-            <div v-for="f in facilities" :key="f.id" class="facility-card card">
+          <div class="filter-bar">
+            <div class="search-wrapper">
+              <input
+                v-model="searchQuery"
+                class="form-control"
+                placeholder="🔍 Search by name, type, or location..."
+                @input="onSearchChange"
+              />
+              <span v-if="searchQuery" class="search-clear" @click="clearSearch">✕</span>
+            </div>
+            <select v-model="facilityTypeFilter" class="form-control filter-select">
+              <option value="">Type: All</option>
+              <option value="Community Hall">Community Hall</option>
+              <option value="Sports Ground">Sports Ground</option>
+              <option value="Park">Park</option>
+              <option value="Auditorium">Auditorium</option>
+              <option value="Conference Room">Conference Room</option>
+              <option value="Playground">Playground</option>
+            </select>
+            <select v-model="priceFilter" class="form-control filter-select">
+              <option value="">Price: All</option>
+              <option value="free">Free</option>
+              <option value="budget">Under ₹500/hr</option>
+              <option value="mid">₹500-1000/hr</option>
+              <option value="premium">Above ₹1000/hr</option>
+            </select>
+            <button
+              v-if="hasActiveFilters"
+              class="btn btn-outline btn-sm clear-filters"
+              @click="clearAllFilters"
+            >
+              Clear Filters
+            </button>
+          </div>
+
+          <div v-if="hasActiveFilters || searchQuery" class="filter-info">
+            <span class="result-count">📊 {{ filtered.length }} facilit{{ filtered.length !== 1 ? 'ies' : 'y' }} found</span>
+          </div>
+
+          <div v-if="filtered.length > 0" class="facilities-grid">
+            <div v-for="f in filtered" :key="f.id" class="facility-card card">
               <ImageGallery v-if="f.image_urls?.length" :images="f.image_urls" alt="Facility photo" class="facility-gallery" />
               <div class="facility-header">
                 <div class="facility-type-icon">{{ typeIcon(f.facility_type) }}</div>
@@ -33,6 +72,14 @@
               </button>
             </div>
           </div>
+          <EmptyState
+            v-else
+            type="search"
+            title="No Facilities Found"
+            description="Try adjusting your search filters or browse all available facilities."
+            buttonText="Clear Filters"
+            @action="clearAllFilters"
+          />
         </div>
       </div>
     </div>
@@ -136,14 +183,22 @@ import AppSidebar from "../../components/AppSidebar.vue"
 import AppTopbar from "../../components/AppTopbar.vue"
 import NotificationsPanel from "../../components/NotificationsPanel.vue"
 import ImageGallery from "../../components/ImageGallery.vue"
+import EmptyState from "../../components/EmptyState.vue"
+import { useToast } from "../../composables/useToast"
 import api from "../../api"
 
+const { success: toastSuccess } = useToast()
 const loading = ref(true)
 const facilities = ref([])
 const showNotif = ref(false)
 const unread = ref(0)
 const successModal = ref(null)
 const today = new Date().toISOString().split("T")[0]
+
+const searchQuery = ref('')
+const facilityTypeFilter = ref('')
+const priceFilter = ref('')
+let searchTimeout = null
 
 const bookingModal = ref({ show: false, facility: null, loading: false, error: "" })
 const bookingForm = ref({ booking_date: "", start_time: "", end_time: "", attendees: 1, purpose: "" })
@@ -161,6 +216,42 @@ const estimatedFee = computed(() => {
   if (!bookingModal.value.facility) return 0
   return Math.round(bookingModal.value.facility.fee_per_hour * hours.value * 100) / 100
 })
+
+const filtered = computed(() => {
+  let result = facilities.value
+
+  // Search across name, facility_type, ward, address
+  if (searchQuery.value) {
+    const q = searchQuery.value.toLowerCase()
+    result = result.filter(f =>
+      f.name?.toLowerCase().includes(q) ||
+      f.facility_type?.toLowerCase().includes(q) ||
+      f.ward?.toLowerCase().includes(q) ||
+      f.address?.toLowerCase().includes(q) ||
+      f.description?.toLowerCase().includes(q)
+    )
+  }
+
+  // Filter by facility type
+  if (facilityTypeFilter.value) {
+    result = result.filter(f => f.facility_type === facilityTypeFilter.value)
+  }
+
+  // Filter by price range
+  if (priceFilter.value) {
+    result = result.filter(f => {
+      if (priceFilter.value === 'free') return f.fee_per_hour === 0
+      if (priceFilter.value === 'budget') return f.fee_per_hour > 0 && f.fee_per_hour <= 500
+      if (priceFilter.value === 'mid') return f.fee_per_hour > 500 && f.fee_per_hour <= 1000
+      if (priceFilter.value === 'premium') return f.fee_per_hour > 1000
+      return true
+    })
+  }
+
+  return result
+})
+
+const hasActiveFilters = computed(() => searchQuery.value || facilityTypeFilter.value || priceFilter.value)
 
 onMounted(async () => {
   const [facRes, notifRes] = await Promise.all([api.get("/facilities"), api.get("/notifications")])
@@ -213,6 +304,23 @@ function typeIcon(t) {
     "Park": "🌳", "Auditorium": "🎭", "Library": "📚",
   }
   return map[t] || "🏗️"
+}
+
+function onSearchChange() {
+  clearTimeout(searchTimeout)
+  searchTimeout = setTimeout(() => {
+    // Debounce search
+  }, 300)
+}
+
+function clearSearch() {
+  searchQuery.value = ''
+}
+
+function clearAllFilters() {
+  searchQuery.value = ''
+  facilityTypeFilter.value = ''
+  priceFilter.value = ''
 }
 </script>
 
@@ -273,4 +381,79 @@ function typeIcon(t) {
 .navy-text { color: var(--navy); }
 .success-msg { margin: 1rem 0; }
 .justify-center { justify-content: center; }
+
+.filter-bar {
+  display: flex;
+  gap: 12px;
+  margin-bottom: 16px;
+  flex-wrap: wrap;
+  align-items: center;
+}
+
+.search-wrapper {
+  flex: 1;
+  position: relative;
+  min-width: 200px;
+}
+
+.search-wrapper .form-control {
+  padding-right: 32px;
+}
+
+.search-clear {
+  position: absolute;
+  right: 12px;
+  top: 50%;
+  transform: translateY(-50%);
+  cursor: pointer;
+  color: #9ca3af;
+  font-size: 18px;
+  font-weight: bold;
+  transition: color 0.2s;
+}
+
+.search-clear:hover {
+  color: #6b7280;
+}
+
+.filter-select {
+  min-width: 140px;
+}
+
+.clear-filters {
+  white-space: nowrap;
+}
+
+.filter-info {
+  background: #f0f9ff;
+  border-left: 4px solid #3b82f6;
+  padding: 8px 12px;
+  margin-bottom: 16px;
+  border-radius: 4px;
+  font-size: 14px;
+  color: #1e40af;
+}
+
+.result-count {
+  font-weight: 500;
+}
+
+@media (max-width: 640px) {
+  .filter-bar {
+    flex-direction: column;
+  }
+
+  .search-wrapper,
+  .filter-select {
+    width: 100%;
+  }
+
+  .filter-info {
+    font-size: 12px;
+  }
+
+  .facilities-grid {
+    grid-template-columns: 1fr;
+  }
+}
 </style>

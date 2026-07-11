@@ -27,7 +27,7 @@
               <thead>
                 <tr>
                   <th>ID</th><th>Name</th><th>Email</th><th>Role</th>
-                  <th>Ward / Department</th><th>Phone</th><th>Subscription</th><th>Status</th><th>Joined</th><th>Actions</th>
+                  <th>Department</th><th>Phone</th><th>Subscription</th><th>Status</th><th>Joined</th><th>Actions</th>
                 </tr>
               </thead>
               <tbody>
@@ -43,8 +43,8 @@
                   <td>
                     <span :class="`role-badge role-${u.role}`">{{ u.role }}</span>
                   </td>
-                  <!-- Citizens belong to a ward; officers/admin work department-wide across all wards -->
-                  <td class="text-sm">{{ u.role === 'citizen' ? (u.ward || '—') : (u.department || '—') }}</td>
+                  <!-- Citizens have no department (only staff/admin do) -->
+                  <td class="text-sm">{{ u.department || '—' }}</td>
                   <td class="text-sm">{{ u.phone || '—' }}</td>
                   <td>
                     <span v-if="subMap[u.id]" :class="`sub-badge sub-${subMap[u.id].status}`">
@@ -95,14 +95,6 @@
               To make someone an officer, use Manage Officers instead (it requires picking a department).
             </p>
           </div>
-          <!-- Ward is a citizen-only attribute; officers cover their department across all wards -->
-          <div class="form-group" v-if="editModal.role === 'citizen'">
-            <label>Ward</label>
-            <select v-model="editModal.ward" class="form-control">
-              <option value="">Select Ward</option>
-              <option v-for="w in wards" :key="w" :value="w">{{ w }}</option>
-            </select>
-          </div>
         </div>
         <div class="modal-footer">
           <button class="btn btn-outline" @click="editModal.show = false">Cancel</button>
@@ -131,7 +123,6 @@ const showNotif = ref(false)
 const unread = ref(0)
 const roleFilter = ref("")
 const search = ref("")
-const wards = ["Ward-1","Ward-2","Ward-3","Central"]
 
 const subMap = computed(() => {
   const m = {}
@@ -150,7 +141,7 @@ const filtered = computed(() => {
   })
 })
 
-const editModal = ref({ show: false, user: null, role: "", ward: "", loading: false, error: "" })
+const editModal = ref({ show: false, user: null, role: "", loading: false, error: "" })
 
 onMounted(async () => {
   const [uRes, nRes, sRes] = await Promise.all([
@@ -163,7 +154,7 @@ onMounted(async () => {
 })
 
 function openEdit(u) {
-  editModal.value = { show: true, user: u, role: u.role, ward: u.ward || "", loading: false, error: "" }
+  editModal.value = { show: true, user: u, role: u.role, loading: false, error: "" }
 }
 
 async function confirmEdit() {
@@ -171,10 +162,9 @@ async function confirmEdit() {
   editModal.value.error = ""
   try {
     const payload = { role: editModal.value.role }
-    if (editModal.value.role === 'citizen') payload.ward = editModal.value.ward
     const { data } = await api.put(`/admin/users/${editModal.value.user.id}`, payload)
     const u = users.value.find(x => x.id === editModal.value.user.id)
-    if (u) { u.role = data.role; u.ward = data.ward }
+    if (u) { u.role = data.role }
     editModal.value.show = false
   } catch (e) {
     editModal.value.error = e.response?.data?.message || "Update failed."

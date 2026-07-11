@@ -81,6 +81,12 @@
 </template>
 
 <script setup>
+/**
+ * Manage Subscriptions - Admin view of Premium subscription revenue and analytics
+ * Tracks: active subscribers, monthly recurring revenue, payment status
+ * Shows subscription lifecycle: active → cancelled
+ * Key metric for business analytics and citizen engagement
+ */
 import { ref, computed, onMounted } from "vue"
 import AppSidebar from "../../components/AppSidebar.vue"
 import AppTopbar from "../../components/AppTopbar.vue"
@@ -88,11 +94,11 @@ import NotificationsPanel from "../../components/NotificationsPanel.vue"
 import api from "../../api"
 
 const loading = ref(true)
-const subscriptions = ref([])
-const stats = ref({})
+const subscriptions = ref([]) // All citizen subscriptions
+const stats = ref({}) // Subscription stats (active, cancelled, MRR, total collected)
 const showNotif = ref(false)
 const unread = ref(0)
-const statusFilter = ref("")
+const statusFilter = ref("") // Filter by active/cancelled
 const search = ref("")
 
 const filtered = computed(() => {
@@ -128,18 +134,18 @@ function fmtDateOnly(d) {
 .stats-row { display: flex; gap: 0.75rem; margin-bottom: 1.25rem; flex-wrap: wrap; }
 .stat-card {
   flex: 1; min-width: 150px;
-  background: #fff; border: 1px solid #FFD1E6; border-radius: 8px;
+  background: #fff; border: 1px solid var(--border); border-radius: 8px;
   padding: 1rem 1.1rem;
 }
-.stat-val { font-size: 1.5rem; font-weight: 800; color: #5C1A41; line-height: 1; }
-.stat-lbl { font-size: 0.7rem; color: #888; margin-top: 0.3rem; text-transform: uppercase; letter-spacing: 0.04em; }
-.stat-ok   .stat-val { color: #E0218A; }
-.stat-warn .stat-val { color: #A66E00; }
-.stat-muted .stat-val { color: #9B2C6F; }
-.badge-confirmed { background: rgba(21,128,61,0.14); color: #15803D; }
+.stat-val { font-size: 1.5rem; font-weight: 800; color: var(--text); line-height: 1; }
+.stat-lbl { font-size: 0.7rem; color: var(--text-muted); margin-top: 0.3rem; text-transform: uppercase; letter-spacing: 0.04em; }
+.stat-ok   .stat-val { color: var(--primary); }
+.stat-warn .stat-val { color: var(--warning); }
+.stat-muted .stat-val { color: var(--text-muted); }
+.badge-confirmed { background: rgba(21,128,61,0.14); color: var(--success); }
 .badge-cancelled { background: rgba(148,163,184,0.2); color: #64748B; }
-.td-sub { font-size: 0.75rem; color: #D69AB8; }
-.td-dash { color: #D69AB8; font-size: 0.82rem; }
+.td-sub { font-size: 0.75rem; color: var(--text-muted); }
+.td-dash { color: var(--text-muted); font-size: 0.82rem; }
 .filter-bar { display: flex; gap: 0.75rem; padding: 1rem; }
 .filter-select { max-width: 200px; }
 </style>

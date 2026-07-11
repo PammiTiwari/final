@@ -220,6 +220,12 @@
 </template>
 
 <script setup>
+/**
+ * My Subscription - Citizen Premium subscription management
+ * Features: subscribe, cancel, resume, pay due invoices, view billing history and invoices
+ * Premium unlocks: file complaints, community feed posting
+ * Payment workflow: subscribe → pending → paid → active (or pending_cancellation → cancelled)
+ */
 import { ref, computed, onMounted } from "vue"
 import AppSidebar from "../../components/AppSidebar.vue"
 import AppTopbar from "../../components/AppTopbar.vue"
@@ -227,11 +233,11 @@ import NotificationsPanel from "../../components/NotificationsPanel.vue"
 import api from "../../api"
 
 const loading = ref(true)
-const acting = ref(false)
+const acting = ref(false) // Prevents duplicate subscribe/cancel/resume requests
 const showNotif = ref(false)
 const unread = ref(0)
 const info = ref({ subscribed: false, subscription: null, due_payment: null, monthly_fee: 100 })
-const payments = ref([])
+const payments = ref([]) // Billing history (monthly invoices)
 const payModal = ref({ show: false, payment: null, method: "upi", loading: false, error: "" })
 const invoice = ref(null)
 
@@ -258,11 +264,16 @@ onMounted(async () => {
   }
 })
 
+/**
+ * Subscribe to Premium or resume cancelled subscription
+ * Creates initial pending payment for the subscription
+ * Reloads subscription status and payment history after success
+ */
 async function openSubscribe() {
   acting.value = true
   try {
     await api.post("/subscriptions/subscribe")
-    await loadAll()
+    await loadAll() // Refresh UI with new subscription status
   } catch (e) {
     alert(e.response?.data?.message || "Could not subscribe")
   } finally {
@@ -270,6 +281,12 @@ async function openSubscribe() {
   }
 }
 
+/**
+ * Cancel subscription (marks pending_cancellation)
+ * If payment is due and unpaid: access ends immediately, due amount is waived
+ * If payment is up-to-date: access continues until next_billing_date, then ends
+ * Citizens can resume cancelled subscriptions anytime before status becomes "cancelled"
+ */
 async function cancelSub() {
   const msg = info.value.due_payment
     ? "Cancel your Premium subscription? You haven't paid for the current cycle yet, so access ends immediately and that unpaid due will be waived."
@@ -290,13 +307,18 @@ function openPay(p) {
   payModal.value = { show: true, payment: p, method: "upi", loading: false, error: "" }
 }
 
+/**
+ * Pay subscription invoice (monthly subscription fee or overdue amount)
+ * Updates payment status to "paid" and refreshes subscription status
+ * Payment methods: UPI, Card, Net Banking, Online Transfer
+ */
 async function confirmPay() {
   payModal.value.loading = true
   payModal.value.error = ""
   try {
     await api.post(`/subscriptions/payments/${payModal.value.payment.id}/pay`, { method: payModal.value.method })
     payModal.value.show = false
-    await loadAll()
+    await loadAll() // Refresh to remove "Payment Due" banner if this was the due payment
   } catch (e) {
     payModal.value.error = e.response?.data?.message || "Payment failed."
   } finally {
@@ -374,8 +396,8 @@ function fmtDateOnly(d) {
   padding: 3rem 2rem 2.5rem;
   margin-bottom: 1.75rem;
   border-radius: 20px;
-  background: linear-gradient(135deg, #FF4FA3 0%, #E0218A 45%, #7A1D52 100%);
-  box-shadow: 0 12px 32px rgba(224,33,138,0.28);
+  background: linear-gradient(135deg, var(--primary) 0%, var(--accent-secondary) 55%, var(--navy) 100%);
+  box-shadow: 0 12px 32px rgba(0,82,255,0.28);
 }
 .hero-glow {
   position: absolute; top: -60px; right: -60px;
@@ -395,7 +417,7 @@ function fmtDateOnly(d) {
 .hero-price span { font-size: 1rem; font-weight: 500; color: rgba(255,255,255,0.75); }
 .btn-hero {
   position: relative;
-  background: #fff; color: #E0218A; border: none;
+  background: #fff; color: var(--primary); border: none;
   font-size: 0.95rem; font-weight: 800; padding: 0.85rem 2.5rem;
   border-radius: 100px; cursor: pointer;
   box-shadow: 0 6px 18px rgba(0,0,0,0.18);
@@ -407,21 +429,21 @@ function fmtDateOnly(d) {
 
 .benefits-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 1rem; }
 .benefit-card {
-  background: #fff; border: 1px solid #FFD1E6; border-radius: 14px;
+  background: #fff; border: 1px solid var(--border); border-radius: 14px;
   padding: 1.4rem 1.5rem; transition: transform 0.15s, box-shadow 0.15s;
 }
-.benefit-card:hover { transform: translateY(-3px); box-shadow: 0 10px 24px rgba(224,33,138,0.12); }
+.benefit-card:hover { transform: translateY(-3px); box-shadow: var(--shadow-hover); }
 .benefit-icon {
   width: 44px; height: 44px; border-radius: 12px;
   display: flex; align-items: center; justify-content: center;
   font-size: 1.2rem; margin-bottom: 0.75rem;
 }
-.icon-pink   { background: rgba(224,33,138,0.14); color: #E0218A; }
+.icon-pink   { background: var(--accent); color: var(--primary); }
 .icon-gold   { background: rgba(199,145,0,0.16);  color: #C79100; }
 .icon-purple { background: rgba(155,89,182,0.15); color: #9B59B6; }
-.icon-teal   { background: rgba(21,128,61,0.14);  color: #15803D; }
-.benefit-card h3 { font-size: 0.98rem; font-weight: 800; color: #5C1A41; margin-bottom: 0.35rem; }
-.benefit-card p { font-size: 0.83rem; color: #9B2C6F; line-height: 1.5; }
+.icon-teal   { background: rgba(21,128,61,0.14);  color: var(--success); }
+.benefit-card h3 { font-size: 0.98rem; font-weight: 800; color: var(--text); margin-bottom: 0.35rem; }
+.benefit-card p { font-size: 0.83rem; color: var(--text-muted); line-height: 1.5; }
 
 @media (max-width: 640px) {
   .benefits-grid { grid-template-columns: 1fr; }
@@ -433,11 +455,11 @@ function fmtDateOnly(d) {
   .subscribed-layout { grid-template-columns: 1fr; }
 }
 
-/* ── Subscribed status card — full pink, matches the hero card's brand ───── */
+/* ── Subscribed status card — matches the hero card's blue brand ─────────── */
 .status-card {
   position: relative; overflow: hidden; color: #fff;
-  background: linear-gradient(135deg, #FF4FA3 0%, #E0218A 55%, #7A1D52 100%);
-  box-shadow: 0 12px 32px rgba(224,33,138,0.28);
+  background: linear-gradient(135deg, var(--primary) 0%, var(--accent-secondary) 55%, var(--navy) 100%);
+  box-shadow: 0 12px 32px rgba(0,82,255,0.28);
 }
 .status-card.is-cancelled {
   background: linear-gradient(135deg, #94A3B8 0%, #64748B 55%, #475569 100%);
@@ -467,7 +489,7 @@ function fmtDateOnly(d) {
 
 .badge-confirmed { background: rgba(255,255,255,0.9); color: #15803D; }
 .badge-cancelled { background: rgba(255,255,255,0.2); color: #fff; }
-.badge-ending { background: rgba(255,255,255,0.9); color: #A66E00; }
+.badge-ending { background: rgba(255,255,255,0.9); color: var(--warning); }
 
 .perks-section { margin-top: -0.25rem; }
 .perks-heading { font-size: 0.76rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; color: rgba(255,255,255,0.7); margin-bottom: 0.5rem; }
@@ -481,7 +503,7 @@ function fmtDateOnly(d) {
 }
 
 .btn-pay-now {
-  background: #fff; color: #E0218A; border: none; font-size: 0.82rem; font-weight: 800;
+  background: #fff; color: var(--primary); border: none; font-size: 0.82rem; font-weight: 800;
   padding: 0.55rem 1.2rem; border-radius: 100px; cursor: pointer;
   box-shadow: 0 4px 12px rgba(0,0,0,0.18);
   transition: transform 0.15s, box-shadow 0.15s;
@@ -490,7 +512,7 @@ function fmtDateOnly(d) {
 .btn-pay-now:hover { transform: translateY(-1px); box-shadow: 0 6px 16px rgba(0,0,0,0.24); }
 
 .btn-hero-sm {
-  background: #fff; color: #E0218A; border: none; font-size: 0.82rem; font-weight: 800;
+  background: #fff; color: var(--primary); border: none; font-size: 0.82rem; font-weight: 800;
   padding: 0.5rem 1.3rem; border-radius: 100px; cursor: pointer;
   box-shadow: 0 4px 12px rgba(0,0,0,0.18);
   transition: transform 0.15s, box-shadow 0.15s;
@@ -510,36 +532,35 @@ function fmtDateOnly(d) {
   display: flex; flex-direction: column;
   overflow-y: auto;
   scrollbar-width: thin;
-  scrollbar-color: #FFD1E6 transparent;
+  scrollbar-color: var(--accent) transparent;
 }
 .invoice-list::-webkit-scrollbar { width: 6px; }
-.invoice-list::-webkit-scrollbar-thumb { background: #FFD1E6; border-radius: 100px; }
+.invoice-list::-webkit-scrollbar-thumb { background: var(--accent); border-radius: 100px; }
 .invoice-list::-webkit-scrollbar-track { background: transparent; }
 .invoice-row {
   display: flex; align-items: center; justify-content: space-between; gap: 0.75rem;
   padding: 0.85rem 0.15rem;
-  border-bottom: 1px solid #FFE9F2;
+  border-bottom: 1px solid var(--border);
 }
 .invoice-row:last-child { border-bottom: none; }
-.invoice-row:hover { background: #FFF7FB; }
-.invoice-period-main { font-size: 0.86rem; font-weight: 700; color: #5C1A41; }
-.invoice-period-sub { font-size: 0.74rem; color: #B0708F; margin-top: 0.15rem; }
+.invoice-row:hover { background: var(--stone); }
+.invoice-period-main { font-size: 0.86rem; font-weight: 700; color: var(--text); }
+.invoice-period-sub { font-size: 0.74rem; color: var(--text-muted); margin-top: 0.15rem; }
 .invoice-col-amount { text-align: right; flex-shrink: 0; }
-.invoice-amount-val { font-size: 0.92rem; font-weight: 800; color: #5C1A41; }
+.invoice-amount-val { font-size: 0.92rem; font-weight: 800; color: var(--text); }
 .invoice-col-amount .badge { display: block; margin-top: 0.25rem; }
 .invoice-col-action { display: flex; flex-direction: column; gap: 0.35rem; align-items: flex-end; flex-shrink: 0; }
 
-.td-method { font-size: 0.84rem; color: #9B2C6F; }
-.td-txn { font-family: monospace; font-size: 0.8rem; color: #9B2C6F; }
+.td-method { font-size: 0.84rem; color: var(--text-muted); }
+.td-txn { font-family: monospace; font-size: 0.8rem; color: var(--text-muted); }
 .btn-xs { padding: 0.22rem 0.65rem; font-size: 0.72rem; border-radius: 4px; font-weight: 600; cursor: pointer; }
-.btn-success { background: #E0218A; color: #fff; }
 .invoice-modal { max-width: 420px; }
 .invoice-body { padding: 0 0.25rem; }
-.inv-row { display: flex; justify-content: space-between; font-size: 0.85rem; padding: 0.3rem 0; color: #9B2C6F; }
-.inv-row span:first-child { color: #B0708F; }
-.inv-divider { border-top: 1px solid #FFD1E6; margin: 0.5rem 0; }
+.inv-row { display: flex; justify-content: space-between; font-size: 0.85rem; padding: 0.3rem 0; color: var(--text); }
+.inv-row span:first-child { color: var(--text-muted); }
+.inv-divider { border-top: 1px solid var(--border); margin: 0.5rem 0; }
 .inv-total { font-size: 1rem; font-weight: 800; padding-top: 0.4rem; }
 .inv-payment-status { font-weight: 700; }
-.inv-payment-status.is-paid { color: #0E7A4F; }
-.inv-payment-status.is-due { color: #A66E00; }
+.inv-payment-status.is-paid { color: var(--success); }
+.inv-payment-status.is-due { color: var(--warning); }
 </style>

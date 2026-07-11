@@ -3,6 +3,7 @@
     <AppSidebar />
     <div class="main-content">
       <AppTopbar title="Dashboard" :unread-count="unread" />
+      <FloatingActionButton :actions="fabActions" @action="handleFabAction" />
       <div class="content-area">
         <div class="page-header">
           <div class="page-header-left">
@@ -51,7 +52,7 @@
               <div class="section-title">Recent Complaints</div>
               <router-link to="/complaints" class="btn btn-sm btn-primary">View All</router-link>
             </div>
-            <div class="table-wrapper">
+            <div v-if="requests.length" class="table-wrapper">
               <table class="data-table">
                 <thead>
                   <tr>
@@ -64,9 +65,6 @@
                   </tr>
                 </thead>
                 <tbody>
-                  <tr v-if="!requests.length">
-                    <td colspan="6" class="empty-state">No complaints yet. Submit your first complaint!</td>
-                  </tr>
                   <tr v-for="r in requests.slice(0, 5)" :key="r.id">
                     <td><code class="cmp-id">{{ r.cmp_id }}</code></td>
                     <td><span class="cat-badge">{{ r.category }}</span></td>
@@ -80,6 +78,14 @@
                 </tbody>
               </table>
             </div>
+            <EmptyState
+              v-else
+              type="complaints"
+              title="No Complaints Yet"
+              description="You haven't submitted any complaints. Start helping your community by reporting an issue."
+              buttonText="Submit Your First Complaint"
+              @action="router.push('/submit')"
+            />
           </div>
         </template>
       </div>
@@ -88,23 +94,51 @@
 </template>
 
 <script setup>
+/**
+ * Citizen Dashboard - Main landing page for citizens
+ * Displays complaint statistics, recent complaints, and subscription status banner
+ * Enforces Premium subscription requirement for filing complaints via banner messaging
+ */
 import { ref, computed, onMounted } from 'vue'
+import { useRouter } from 'vue-router'
 import AppSidebar from '../../components/AppSidebar.vue'
 import AppTopbar from '../../components/AppTopbar.vue'
+import FloatingActionButton from '../../components/FloatingActionButton.vue'
+import EmptyState from '../../components/EmptyState.vue'
 import { useAuthStore } from '../../stores/auth'
+import { useToast } from '../../composables/useToast'
 import api from '../../api'
 import { fmtStatus } from '../../utils/status'
 
 const auth = useAuthStore()
+const router = useRouter()
+const { success, error } = useToast()
 const loading = ref(true)
 const stats = ref({})
 const requests = ref([])
 const unread = ref(0)
 const subInfo = ref(null)
 
-// Filing a complaint or joining the community feed needs an active, paid-up
-// Premium subscription — this just explains that to a new citizen so the
-// "locked" screen on Submit Complaint doesn't come as a surprise.
+const fabActions = [
+  { icon: '📝', label: 'New Complaint' },
+  { icon: '🏛️', label: 'Browse Facilities' }
+]
+
+const handleFabAction = (action) => {
+  if (action.label === 'New Complaint') {
+    router.push('/submit')
+  } else if (action.label === 'Browse Facilities') {
+    router.push('/facilities')
+  }
+}
+
+/**
+ * Subscription banner logic
+ * Shows "Subscribe Now" if no subscription exists
+ * Shows payment reminder if payment is overdue
+ * Null if subscription is active and up-to-date
+ * IMPORTANT: Filing complaints and posting to community feed require active Premium subscription
+ */
 const subBanner = computed(() => {
   if (!subInfo.value) return null
   if (!subInfo.value.subscription) {
@@ -124,9 +158,13 @@ const subBanner = computed(() => {
   return null
 })
 
+/**
+ * Fetch dashboard data on mount
+ * Subscription info is fetched separately (fire-and-forget) to avoid blocking dashboard
+ * Core dashboard data (stats, requests, notifications) is fetched in parallel
+ */
 onMounted(async () => {
-  // Fetched separately from the core dashboard data below — a hiccup here
-  // should never block stats/recent-complaints from showing.
+  // Fetch subscription status separately — errors here should not block dashboard display
   api.get('/subscriptions/me').then(res => { subInfo.value = res.data }).catch(() => {})
 
   try {
