@@ -24,9 +24,13 @@
     <!-- Bottom: notifications + user -->
     <div class="sidebar-footer">
       <router-link to="/notifications" class="footer-link notif-link">
-        <span>Notifications</span>
+        <span>🔔 Notifications</span>
         <span v-if="unreadCount > 0" class="notif-badge">{{ unreadCount > 9 ? '9+' : unreadCount }}</span>
       </router-link>
+
+      <button class="footer-link logout-link" @click="logout" title="Logout">
+        <span>&#10132; Logout</span>
+      </button>
 
       <div class="user-section">
         <div class="user-avatar">{{ userInitial }}</div>
@@ -34,13 +38,18 @@
           <div class="user-name">{{ auth.user?.name }}</div>
           <div class="user-role">{{ roleLabel }}</div>
         </div>
-        <button class="logout-btn" @click="logout" title="Logout">&#10132;</button>
       </div>
     </div>
   </aside>
 </template>
 
 <script setup>
+/**
+ * AppSidebar Component
+ * Main navigation sidebar with role-based menu items (citizen/staff/admin).
+ * Displays unread notification count, user profile, and logout button.
+ * Menu items conditionally render based on user role.
+ */
 import { ref, computed, onMounted, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useAuthStore } from '../stores/auth'
@@ -50,29 +59,42 @@ const auth = useAuthStore()
 const route = useRoute()
 const router = useRouter()
 
+// Notification state
 const unreadCount = ref(0)
 
+// Computed properties for display
 const userInitial = computed(() => auth.user?.name?.charAt(0)?.toUpperCase() || 'U')
-const roleLabel   = computed(() => auth.role ? auth.role.charAt(0).toUpperCase() + auth.role.slice(1) : '')
-const homePath    = computed(() => {
+const roleLabel = computed(() => auth.role ? auth.role.charAt(0).toUpperCase() + auth.role.slice(1) : '')
+
+// Determine home path based on role (admin/staff/citizen)
+const homePath = computed(() => {
   if (auth.isAdmin) return '/admin/dashboard'
   if (auth.isStaff) return '/staff/dashboard'
   return '/dashboard'
 })
 
+// Fetch unread notification count on component mount
 onMounted(() => {
   api.get('/notifications').then(res => { unreadCount.value = res.data.unread_count || 0 }).catch(() => {})
 })
 
+// Refetch unread count when route changes (user navigates)
 watch(() => route.fullPath, () => {
   api.get('/notifications').then(res => { unreadCount.value = res.data.unread_count || 0 }).catch(() => {})
 })
 
+/**
+ * Clear auth state and redirect to login page.
+ */
 function logout() {
   auth.logout()
   router.push('/login')
 }
 
+/**
+ * Determine if a nav item matches current route.
+ * Supports exact match mode and prefix matching for nested routes.
+ */
 function isActive(item) {
   if (!item.path) return false
   if (item.exact) return route.path === item.path
@@ -225,6 +247,8 @@ const navItems = computed(() => {
 }
 .footer-link:hover { background: rgba(255,255,255,0.06); color: #fff; }
 .notif-link { justify-content: space-between; }
+.logout-link { width: 100%; background: none; border: none; cursor: pointer; font-family: inherit; }
+.logout-link:hover { color: var(--danger); }
 .notif-badge {
   background: var(--danger);
   color: #fff;
@@ -268,16 +292,4 @@ const navItems = computed(() => {
   text-transform: uppercase;
   letter-spacing: 0.05em;
 }
-.logout-btn {
-  background: none;
-  border: none;
-  color: #6B7A99;
-  cursor: pointer;
-  font-size: 1rem;
-  padding: 0.2rem;
-  border-radius: 4px;
-  transition: var(--transition);
-  flex-shrink: 0;
-}
-.logout-btn:hover { color: var(--danger); }
 </style>

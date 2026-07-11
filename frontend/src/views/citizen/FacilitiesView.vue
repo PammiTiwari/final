@@ -25,9 +25,11 @@
               <option value="Community Hall">Community Hall</option>
               <option value="Sports Ground">Sports Ground</option>
               <option value="Park">Park</option>
-              <option value="Auditorium">Auditorium</option>
               <option value="Conference Room">Conference Room</option>
-              <option value="Playground">Playground</option>
+              <option value="Auditorium">Auditorium</option>
+              <option value="Library Hall">Library Hall</option>
+              <option value="Swimming Pool">Swimming Pool</option>
+              <option value="Other">Other</option>
             </select>
             <select v-model="priceFilter" class="form-control filter-select">
               <option value="">Price: All</option>
