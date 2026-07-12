@@ -155,6 +155,7 @@ import AppSidebar from "../../components/AppSidebar.vue"
 import AppTopbar from "../../components/AppTopbar.vue"
 import NotificationsPanel from "../../components/NotificationsPanel.vue"
 import api from "../../api"
+import { downloadInvoicePdf } from "../../utils/invoicePdf"
 
 const loading = ref(true)
 const bookings = ref([])
@@ -173,48 +174,28 @@ async function viewInvoice(b) {
   }
 }
 
-function escapeHtml(s) {
-  return String(s ?? "").replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]))
-}
-
 function downloadInvoice(inv) {
   const paymentLabel = inv.payment_status === "free" ? "Free" : inv.payment_status.toUpperCase()
-  const e = escapeHtml
-  const html = `<!DOCTYPE html>
-<html><head><meta charset="utf-8"><title>${e(inv.invoice_number)}</title>
-<style>
-  body { font-family: Arial, sans-serif; color: #1e293b; max-width: 480px; margin: 2rem auto; }
-  h1 { font-size: 1.2rem; margin-bottom: 0.25rem; }
-  .sub { color: #64748b; font-size: 0.85rem; margin-bottom: 1.5rem; }
-  .row { display: flex; justify-content: space-between; padding: 0.35rem 0; font-size: 0.9rem; }
-  .row span:first-child { color: #64748b; }
-  hr { border: none; border-top: 1px solid #e2e8f0; margin: 0.5rem 0; }
-  .total { font-size: 1.1rem; font-weight: 700; }
-  @media print { body { margin: 0; } }
-</style></head>
-<body>
-  <h1>Cyber Panchayat — Booking Invoice</h1>
-  <div class="sub">Invoice ${e(inv.invoice_number)} &bull; Issued ${e(inv.issued_at)}</div>
-  <div class="row"><span>Citizen</span><strong>${e(inv.citizen_name)}</strong></div>
-  <div class="row"><span>Phone</span><span>${e(inv.citizen_phone) || "—"}</span></div>
-  <hr>
-  <div class="row"><span>Facility</span><strong>${e(inv.facility_name)}</strong></div>
-  <div class="row"><span>Address</span><span>${e(inv.facility_address)}</span></div>
-  <div class="row"><span>Date</span><span>${e(inv.booking_date)}</span></div>
-  <div class="row"><span>Time</span><span>${e(inv.start_time)} – ${e(inv.end_time)} (${e(inv.hours)}h)</span></div>
-  <div class="row"><span>Purpose</span><span>${e(inv.purpose)}</span></div>
-  <hr>
-  <div class="row"><span>Rate</span><span>₹${e(inv.fee_per_hour)}/hr × ${e(inv.hours)}h</span></div>
-  <div class="row"><span>Subtotal</span><span>₹${e(inv.subtotal)}</span></div>
-  <div class="row"><span>GST (18%)</span><span>₹${e(inv.gst_18_percent)}</span></div>
-  <hr>
-  <div class="row total"><span>Total</span><strong>₹${e(inv.total)}</strong></div>
-  <div class="row"><span>Payment</span><strong>${e(paymentLabel)}</strong></div>
-  <script>window.onload = () => window.print()<\/script>
-</body></html>`
-  const win = window.open("", "_blank")
-  win.document.write(html)
-  win.document.close()
+  downloadInvoicePdf({
+    title: "Cyber Panchayat — Booking Invoice",
+    invoiceNumber: inv.invoice_number,
+    issuedAt: inv.issued_at,
+    filename: `${inv.invoice_number}.pdf`,
+    rows: [
+      ["Citizen", inv.citizen_name, { bold: true }],
+      ["Phone", inv.citizen_phone || "—"],
+      ["Facility", inv.facility_name, { divider: true, bold: true }],
+      ["Address", inv.facility_address],
+      ["Date", inv.booking_date],
+      ["Time", `${inv.start_time} – ${inv.end_time} (${inv.hours}h)`],
+      ["Purpose", inv.purpose],
+      ["Rate", `₹${inv.fee_per_hour}/hr × ${inv.hours}h`, { divider: true }],
+      ["Subtotal", `₹${inv.subtotal}`],
+      ["GST (18%)", `₹${inv.gst_18_percent}`],
+      ["Total", `₹${inv.total}`, { divider: true, bold: true }],
+      ["Payment", paymentLabel],
+    ],
+  })
 }
 
 const filtered = computed(() => {

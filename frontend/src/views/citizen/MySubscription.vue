@@ -231,6 +231,7 @@ import AppSidebar from "../../components/AppSidebar.vue"
 import AppTopbar from "../../components/AppTopbar.vue"
 import NotificationsPanel from "../../components/NotificationsPanel.vue"
 import api from "../../api"
+import { downloadInvoicePdf } from "../../utils/invoicePdf"
 
 const loading = ref(true)
 const acting = ref(false) // Prevents duplicate subscribe/cancel/resume requests
@@ -335,40 +336,23 @@ async function viewInvoice(p) {
   }
 }
 
-function escapeHtml(s) {
-  return String(s ?? "").replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]))
-}
-
 function downloadInvoice(inv) {
-  const e = escapeHtml
-  const html = `<!DOCTYPE html>
-<html><head><meta charset="utf-8"><title>${e(inv.invoice_number)}</title>
-<style>
-  body { font-family: Arial, sans-serif; color: #1e293b; max-width: 480px; margin: 2rem auto; }
-  h1 { font-size: 1.2rem; margin-bottom: 0.25rem; }
-  .sub { color: #64748b; font-size: 0.85rem; margin-bottom: 1.5rem; }
-  .row { display: flex; justify-content: space-between; padding: 0.35rem 0; font-size: 0.9rem; }
-  .row span:first-child { color: #64748b; }
-  hr { border: none; border-top: 1px solid #e2e8f0; margin: 0.5rem 0; }
-  .total { font-size: 1.1rem; font-weight: 700; }
-  @media print { body { margin: 0; } }
-</style></head>
-<body>
-  <h1>Cyber Panchayat — Subscription Invoice</h1>
-  <div class="sub">Invoice ${e(inv.invoice_number)} &bull; Issued ${e(inv.issued_at)}</div>
-  <div class="row"><span>Citizen</span><strong>${e(inv.citizen_name)}</strong></div>
-  <div class="row"><span>Email</span><span>${e(inv.citizen_email) || "—"}</span></div>
-  <hr>
-  <div class="row"><span>Plan</span><strong>${e(inv.plan)}</strong></div>
-  <div class="row"><span>Billing Period</span><span>${e(inv.period_start)} – ${e(inv.period_end)}</span></div>
-  <hr>
-  <div class="row total"><span>Amount</span><strong>₹${e(inv.amount)}</strong></div>
-  <div class="row"><span>Payment</span><strong>${e(inv.status.toUpperCase())}</strong></div>
-  <script>window.onload = () => window.print()<\/script>
-</body></html>`
-  const win = window.open("", "_blank")
-  win.document.write(html)
-  win.document.close()
+  const rows = [
+    ["Citizen", inv.citizen_name, { bold: true }],
+    ["Email", inv.citizen_email || "—"],
+    ["Plan", inv.plan, { divider: true, bold: true }],
+    ["Billing Period", `${inv.period_start} – ${inv.period_end}`],
+    ["Amount", `₹${inv.amount}`, { divider: true, bold: true }],
+    ["Payment", inv.status.toUpperCase()],
+  ]
+  if (inv.transaction_ref) rows.push(["Txn Ref", inv.transaction_ref])
+  downloadInvoicePdf({
+    title: "Cyber Panchayat — Subscription Invoice",
+    invoiceNumber: inv.invoice_number,
+    issuedAt: inv.issued_at,
+    filename: `${inv.invoice_number}.pdf`,
+    rows,
+  })
 }
 
 function methodLabel(m) {

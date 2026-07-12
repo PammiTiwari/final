@@ -41,6 +41,12 @@
             <ImageGallery :images="result.image_urls" alt="Complaint photo" />
           </div>
         </div>
+        <div v-if="result.evidence_urls?.length" class="detail-row">
+          <div class="detail-label">Resolution Evidence</div>
+          <div class="detail-value">
+            <ImageGallery :images="result.evidence_urls" alt="Resolution evidence photo" />
+          </div>
+        </div>
         <div class="detail-row">
           <div class="detail-label">Submitted On</div>
           <div class="detail-value">{{ fmtDate(result.created_at) }}</div>
